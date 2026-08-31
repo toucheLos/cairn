@@ -95,13 +95,25 @@ what each collector can and cannot see, and why.
 
 **Phase 0 — foundations.** Nothing is shipped.
 
-- [ ] 0.1 Clean repo, LICENSE, NOTICE
-- [ ] 0.2 Freeze event schema + class enum
-- [ ] 0.3 Fixture corpus: ~20 real, hand-redacted, pre-classified incidents
+- [x] 0.1 Clean repo, LICENSE, NOTICE
+- [x] 0.2 Freeze event schema + class enum — v1, 25 classes. See `schema/DESIGN.md`.
+- [~] 0.3 Fixture corpus: ~20 real, hand-redacted, pre-classified incidents
       (OOM, walltime, driver-generation mismatch, node-not-responding, IB link flap,
       Munge auth failure, NCCL hang)
+      - [x] Format, loader, validator, golden harness, `make new-fixture`
+      - [x] Redaction scanner + pre-commit hook (`redact/scan/`)
+      - [x] Seven authored fixtures, one per mode above — all `synthetic: true`,
+            excluded from every accuracy measurement. Templates, not evidence.
+      - [ ] **The ~20 real incidents.** This is the remaining Phase 0 work and it
+            cannot be delegated: it needs cluster access, and inventing incidents
+            would corrupt the eval set at its root. Intake procedure is in
+            `fixtures/README.md`.
 
 Phase 0.3 is the test suite *and* the eval set. Build it before the code it tests.
+
+Do not start Phase 1 on the strength of the authored fixtures. They prove the
+harness runs; they prove nothing about whether cairn classifies real incidents
+correctly, and a collector tuned to pass them is tuned to pass our own guesses.
 
 ---
 
