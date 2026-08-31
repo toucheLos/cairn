@@ -133,6 +133,29 @@ Building the collectors corrected three fixtures whose expected streams had been
 authored from the incident rather than from the captured input. See
 `fixtures/README.md`, "Writing the expected stream".
 
+**Phase 2 — first shippable artifact.** The commands run.
+
+- [x] `cairn context --job <id>` — token-budgeted, deterministically ordered,
+      redactable. `--format json` emits the canonical bundle.
+- [x] `cairn doctor` — what each collector can and cannot see, and what each gap
+      costs. Names the producers with no collector at all, so a clean report is
+      not mistaken for a clean fabric.
+- [x] `cairn miss` — the log §6 makes the input to Phase 3.
+- [x] Static binary, no third-party code linked in. Guarded, not assumed.
+- [ ] **Four weeks of dogfooding across every cluster we admin, logging every
+      miss.** Not started. This is the remaining Phase 2 work and it is the part
+      that decides Phase 3.
+
+Half a day of running `doctor` on one ordinary Linux box already found two real
+bugs: the journal collector accepted only the `+0000` offset form while systemd
+emits `-04:00`, so every live journald line failed to parse while the whole
+corpus passed; and unmatched lines were warned about individually, producing
+353,526 warnings on a single host. Both are fixed and both are now covered. The
+lesson is the one §6 already states — the miss log, not our intuition.
+
+Do not skip the dogfooding. Everything above is validated against seven authored
+fixtures and one laptop.
+
 ---
 
 ## 6. Roadmap

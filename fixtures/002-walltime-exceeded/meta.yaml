@@ -34,6 +34,12 @@ redaction_method: ""
 notes: >-
   Authored, not observed.
 
+  The capture uses the +02:00 offset form that systemd actually emits, not the
+  +0200 form. That distinction is not cosmetic: the journal collector originally
+  accepted only the colon-less form, so every real journald line failed to parse
+  while the whole corpus passed. It was found by running `cairn doctor` on an
+  ordinary Fedora box, which is the argument for dogfooding in one line.
+
   This fixture exists partly to pin down a distinction that is easy to get wrong:
   two classes, one cause. The batch step is recorded as sched.cancelled because
   that is what sacct observed, while the job is recorded as

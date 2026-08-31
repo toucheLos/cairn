@@ -12,6 +12,7 @@ FIXTURES := fixtures
 help:
 	@echo "cairn — Phase 0 (foundations). Nothing is shipped."
 	@echo
+	@echo "  make cairn           build the ./cairn binary (static, CGO off)"
 	@echo "  make check           build, vet, test, and scan the corpus"
 	@echo "  make test            go test $(PKG)"
 	@echo "  make scan-fixtures   check the corpus for unredacted material"
@@ -28,6 +29,14 @@ check: build vet test scan-fixtures
 .PHONY: build
 build:
 	$(GO) build $(PKG)
+
+# Invariant §2.5: one static binary. CGO off so it does not pick up a link
+# against the build host's glibc — login nodes routinely run something older
+# than anything you would build on.
+.PHONY: cairn
+cairn:
+	CGO_ENABLED=0 $(GO) build -trimpath -o cairn ./cmd/cairn
+	@echo "built ./cairn — try: ./cairn doctor"
 
 .PHONY: vet
 vet:
@@ -73,3 +82,11 @@ install-hooks:
 .PHONY: verify-guards
 verify-guards:
 	@./scripts/verify-guards.sh
+
+# Replay a fixture through the shipped command. This is what `cairn context`
+# looks like to someone using it, which is worth seeing rather than inferring
+# from test output.
+.PHONY: demo
+demo:
+	@CAIRN_CLUSTER=cluster-a CAIRN_NODE=node-0046 $(GO) run ./cmd/cairn context \
+		--job 918714 --fixture fixtures/006-munge-auth-failure --tz UTC

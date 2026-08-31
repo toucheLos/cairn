@@ -47,7 +47,7 @@ expect_fail() {
 	fi
 }
 
-echo "Verifying Phase 0 guards..."
+echo "Verifying cairn's guards..."
 echo
 
 # 1. The class enum is append-only. Removing a member must fail CI, because the
@@ -96,6 +96,45 @@ if go test ./redact -run 'TestNoOriginalSurvives|TestRedactedBundlePassesTheScan
 	pass=$((pass + 1))
 else
 	printf '  FAIL  redaction round trip\n'
+	fail=$((fail + 1))
+fi
+
+# 7. Invariant §2.5: one static binary. A dynamically linked build works fine on
+#    the machine that produced it and fails on the login node it was built for,
+#    which is the only place it matters.
+BIN=$(mktemp -u)
+if CGO_ENABLED=0 go build -trimpath -o "$BIN" ./cmd/cairn 2>/dev/null; then
+	if file "$BIN" | grep -q "statically linked"; then
+		printf '  ok    the shipped binary is statically linked\n'
+		pass=$((pass + 1))
+	else
+		printf '  FAIL  the binary is not statically linked: %s\n' "$(file "$BIN")"
+		fail=$((fail + 1))
+	fi
+	rm -f "$BIN"
+else
+	printf '  FAIL  the binary does not build\n'
+	fail=$((fail + 1))
+fi
+
+# 8. The shipped binary links no third-party code at all.
+#
+#    Not a stylistic preference. cairn is aimed at sites that will read what they
+#    deploy — defense, pharma, air-gapped facilities — and every module in the
+#    binary is something they have to review. yaml.v3 is a real dependency of the
+#    fixture loader, but that is the test harness and must never reach the
+#    binary. This check is what keeps that true.
+THIRD_PARTY=$(go list -deps ./cmd/cairn \
+	| grep '\.' \
+	| grep -v '^github.com/touchelos/cairn' \
+	| grep -v '^crypto/internal/' \
+	|| true)
+if [ -z "$THIRD_PARTY" ]; then
+	printf '  ok    the shipped binary links no third-party code\n'
+	pass=$((pass + 1))
+else
+	printf '  FAIL  the binary now links third-party code:\n'
+	printf '          %s\n' $THIRD_PARTY
 	fail=$((fail + 1))
 fi
 

@@ -1,29 +1,63 @@
+// Command cairn answers "why did this job die" in one command.
+//
+// Invariant §2.5: one static binary, no daemon, no server, no database. Built
+// with the standard library only, so it cross-compiles to an old login node
+// without a toolchain argument.
+//
+//	cairn context --job <id>   evidence for one job, ready to paste into an LLM
+//	cairn doctor               what each collector can and cannot see, and why
+//	cairn miss --job <id>      record a case cairn got wrong
+//
+// `diff` and `init` are Phase 3.
 package main
 
 import (
 	"fmt"
 	"os"
-
-	"github.com/touchelos/cairn/schema"
 )
 
-// Phase 0 ships nothing runnable. This exists so that `go build ./...` covers
-// the command package and so that anyone who builds and runs the binary is told
-// plainly where the project is, rather than being met with a stub that looks
-// like it might work.
+const usage = `cairn — why did this job die
+
+usage: cairn <command> [flags]
+
+commands:
+  context   evidence for one job, deterministically ordered and token-budgeted
+  doctor    what each collector can and cannot see, and why
+  miss      record a case cairn got wrong, to drive what gets built next
+  version   schema version and build information
+
+Run "cairn <command> -h" for the flags of a command.
+
+cairn is read-only. It runs unprivileged, stores no logs, and works with
+inference switched off — it produces the evidence, it does not call a model.
+`
+
 func main() {
-	fmt.Fprintf(os.Stderr, `cairn: Phase 0 (foundations). Nothing is shipped.
+	if len(os.Args) < 2 {
+		fmt.Fprint(os.Stderr, usage)
+		os.Exit(2)
+	}
 
-There is no working command yet. This repository currently contains the frozen
-event schema (version %d, %d classes), the fixture corpus format, the redaction
-scanner, and the test harness.
+	var err error
+	switch os.Args[1] {
+	case "context":
+		err = runContext(os.Args[2:])
+	case "doctor":
+		err = runDoctor(os.Args[2:])
+	case "miss":
+		err = runMiss(os.Args[2:])
+	case "version":
+		err = runVersion(os.Args[2:])
+	case "-h", "--help", "help":
+		fmt.Print(usage)
+		return
+	default:
+		fmt.Fprintf(os.Stderr, "cairn: unknown command %q\n\n%s", os.Args[1], usage)
+		os.Exit(2)
+	}
 
-  cairn context --job <id>   Phase 2
-  cairn doctor               Phase 2
-  cairn diff <node>          Phase 3
-  cairn init                 Phase 3
-
-See CLAUDE.md for the roadmap and README.md for how to work in this repository.
-`, schema.Version, len(schema.AllClasses()))
-	os.Exit(1)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cairn: %v\n", err)
+		os.Exit(1)
+	}
 }

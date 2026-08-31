@@ -23,6 +23,9 @@ import (
 	"github.com/touchelos/cairn/schema"
 )
 
+// MaxLinesUnbounded caps a journal read when the caller supplied no time window.
+const MaxLinesUnbounded = 10000
+
 type Collector struct{}
 
 func New() *Collector { return &Collector{} }
@@ -234,12 +237,23 @@ func (c *Collector) Collect(ctx context.Context, env collectors.Env, req collect
 
 	// journald first; the slurm daemon logs are read separately because on most
 	// sites they are files rather than journal units.
+	//
+	// The read is always bounded. A login node's journal is routinely millions of
+	// lines covering a year, and slurping it to answer a question about one job
+	// is slow enough that nobody would run the tool twice.
 	args := []string{"-o", "short-iso", "--no-pager"}
+	bounded := ""
 	if !req.Window.Start.IsZero() {
-		args = append(args, "--since", req.Window.Start.Format("2006-01-02 15:04:05"))
-	}
-	if !req.Window.End.IsZero() {
-		args = append(args, "--until", req.Window.End.Format("2006-01-02 15:04:05"))
+		args = append(args, "--since", req.Window.Start.UTC().Format("2006-01-02 15:04:05"), "--utc")
+		if !req.Window.End.IsZero() {
+			args = append(args, "--until", req.Window.End.UTC().Format("2006-01-02 15:04:05"))
+		}
+	} else {
+		// No window: fall back to a line cap rather than a time cap, so the bound
+		// needs no clock and stays reproducible.
+		args = append(args, "--lines", strconv.Itoa(MaxLinesUnbounded))
+		bounded = fmt.Sprintf("no window given, so only the most recent %d lines were read",
+			MaxLinesUnbounded)
 	}
 
 	out, err := env.Run(ctx, "journalctl", args...)
@@ -257,6 +271,7 @@ func (c *Collector) Collect(ctx context.Context, env collectors.Env, req collect
 		}
 	} else {
 		cap.Available = true
+		cap.Detail = bounded
 		evs, warns := parseLines(out, req.Cluster, env.Hostname(), env.Location())
 		res.Events = append(res.Events, evs...)
 		res.Warnings = append(res.Warnings, warns...)
@@ -294,8 +309,12 @@ func (c *Collector) Collect(ctx context.Context, env collectors.Env, req collect
 // Two shapes are handled: journalctl -o short-iso, and the bracketed timestamps
 // the Slurm daemons write to their own logs.
 var (
+	// The offset may be written -0400 or -04:00. systemd emits the colon form,
+	// and accepting only the other one made every real journal line unparseable
+	// while the fixtures — which happened to use +0000 — passed. Captured
+	// output is not a substitute for running against a live host.
 	journalLine = regexp.MustCompile(
-		`^(?P<ts>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[+-]\d{4}|Z)?)\s+` +
+		`^(?P<ts>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[+-]\d{2}:?\d{2}|Z)?)\s+` +
 			`(?P<host>\S+)\s+(?P<unit>[^:\[]+)(?:\[(?P<pid>\d+)\])?:\s*(?P<msg>.*)$`)
 	slurmLogLine = regexp.MustCompile(
 		`^\[(?P<ts>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?)\]\s*(?P<msg>.*)$`)
@@ -303,7 +322,14 @@ var (
 
 func parseLines(data []byte, cluster schema.ClusterName, host string, loc *time.Location) ([]schema.Event, []string) {
 	var events []schema.Event
-	var warnings []string
+
+	// Warnings are aggregated by kind rather than emitted per line. A journal on
+	// a login node is millions of lines and most of them will never match a
+	// signature; one warning each is not a miss log, it is a memory leak that
+	// buries the handful of findings that matter.
+	var unparsedLines, unparsedFirst int
+	var badJobIDs, badJobFirst int
+	var badJobExample string
 
 	for i, line := range strings.Split(strings.TrimRight(string(data), "\n"), "\n") {
 		if strings.TrimSpace(line) == "" {
@@ -311,7 +337,10 @@ func parseLines(data []byte, cluster schema.ClusterName, host string, loc *time.
 		}
 		ts, node, unit, msg, ok := splitLine(line, host, loc)
 		if !ok {
-			warnings = append(warnings, fmt.Sprintf("line %d: unrecognized log format", i+1))
+			if unparsedLines == 0 {
+				unparsedFirst = i + 1
+			}
+			unparsedLines++
 			continue
 		}
 		if cluster == "" {
@@ -353,7 +382,10 @@ func parseLines(data []byte, cluster schema.ClusterName, host string, loc *time.
 				if j, err := schema.ParseJobID(raw); err == nil {
 					job = j
 				} else {
-					warnings = append(warnings, fmt.Sprintf("line %d: unparseable job id %q", i+1, raw))
+					if badJobIDs == 0 {
+						badJobFirst, badJobExample = i+1, raw
+					}
+					badJobIDs++
 				}
 			}
 			evNode := node
@@ -382,6 +414,19 @@ func parseLines(data []byte, cluster schema.ClusterName, host string, loc *time.
 			break
 		}
 		_ = matched
+	}
+
+	var warnings []string
+	if unparsedLines > 0 {
+		warnings = append(warnings, fmt.Sprintf(
+			"%d line(s) did not parse as a log line at all (first at line %d). "+
+				"Most journal traffic is unrelated to cairn, so a large number here is "+
+				"normal; a number close to the total line count means the log format "+
+				"is one cairn does not recognize.", unparsedLines, unparsedFirst))
+	}
+	if badJobIDs > 0 {
+		warnings = append(warnings, fmt.Sprintf(
+			"%d unparseable job id(s), first %q at line %d", badJobIDs, badJobExample, badJobFirst))
 	}
 	return events, warnings
 }
@@ -417,9 +462,10 @@ func parseJournalTime(s string, loc *time.Location) (time.Time, error) {
 		loc = time.UTC
 	}
 	for _, layout := range []string{
-		"2006-01-02T15:04:05-0700",
+		"2006-01-02T15:04:05Z07:00",        // -04:00
+		"2006-01-02T15:04:05.999999Z07:00", // -04:00 with fraction
+		"2006-01-02T15:04:05-0700",         // -0400
 		"2006-01-02T15:04:05.999999-0700",
-		"2006-01-02T15:04:05Z07:00",
 	} {
 		if t, err := time.Parse(layout, s); err == nil {
 			return t.UTC(), nil
