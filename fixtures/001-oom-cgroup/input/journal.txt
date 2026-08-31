@@ -1,6 +1,0 @@
-Mar 04 09:14:01 node-0042 kernel: python3 invoked oom-killer: gfp_mask=0xcc0(GFP_KERNEL), order=0, oom_score_adj=0
-Mar 04 09:14:01 node-0042 kernel: memory: usage 8388608kB, limit 8388608kB, failcnt 4127
-Mar 04 09:14:02 node-0042 kernel: Memory cgroup out of memory: Killed process 31245 (python3) total-vm:41203344kB, anon-rss:8190112kB, file-rss:20480kB, shmem-rss:0kB, UID:90001 pgtables:16404kB oom_score_adj:0
-Mar 04 09:14:02 node-0042 kernel: oom_reaper: reaped process 31245 (python3), now anon-rss:0kB, file-rss:0kB, shmem-rss:0kB
-Mar 04 09:14:02 node-0042 slurmstepd[31200]: error: Detected 1 oom_kill event in StepId=918273.batch. Some of the step tasks have been OOM Killed.
-Mar 04 09:14:02 node-0042 slurmstepd[31200]: done with job

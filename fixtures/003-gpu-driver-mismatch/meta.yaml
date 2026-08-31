@@ -1,10 +1,17 @@
 id: 003-gpu-driver-mismatch
 title: CUDA 12.4 runtime on a node still running a 535-generation driver
+cluster: cluster-a
+# What this fixture is about: the job under investigation, and the node the
+# captures were taken on.
+incident:
+  job: "918412"
+  node: node-0048
+
 synthetic: true
 
 expected_classes:
-  - gpu.driver_mismatch
   - app.nonzero_exit
+  - gpu.driver_mismatch
 
 expected_root_cause: >-
   The job loaded a CUDA 12.4 module, which requires a 550-generation driver. The
@@ -14,7 +21,6 @@ expected_root_cause: >-
   disagree.
 
 producers:
-  - gpu
   - slurm
 
 capability: unprivileged
@@ -29,11 +35,16 @@ redaction_method: ""
 notes: >-
   Authored, not observed.
 
-  Two events carry class gpu.driver_mismatch from two different sources — the gpu
-  collector reading nvidia-smi, and the slurm collector reading the job's stderr.
-  Class and source are independent axes, and a fixture set where they always move
-  together would let that error go unnoticed.
+  The mismatch is visible only in the job's stderr, and that is the point. This
+  fixture originally expected a gpu.driver_mismatch event from nvidia-smi too;
+  building the collector showed that to be wrong. nvidia-smi's "CUDA Version"
+  reports the highest runtime the installed driver supports, not the runtime the
+  job used — 535.104.05 advertising CUDA 12.2 is entirely self-consistent, and
+  nothing in that output is anomalous. Only stderr knows the job asked for 12.4.
 
-  expected_driver_version on the nvidia-smi event is the minimum driver for the
-  CUDA runtime the job asked for. Deriving it from fleet siblings instead is
-  Phase 3 work (CLAUDE.md §7, configuration drift detection).
+  So the class arrives on a slurm-sourced event, because the slurm collector is
+  what locates and reads the job's stderr. Class and source are independent axes,
+  and this is the fixture that demonstrates it.
+
+  Detecting the mismatch without stderr needs fleet-relative comparison — this
+  node's driver against its 47 siblings — which is Phase 3 (CLAUDE.md §7).

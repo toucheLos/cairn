@@ -27,6 +27,30 @@ NNN-short-slug/
     events.json         the canonical event stream a correct collector must produce
 ```
 
+### Naming the captures
+
+`collectors.FixtureEnv` resolves a command to a file by name, so a capture is
+named after the command that produced it:
+
+| Command | File |
+|---|---|
+| `sacct …` | `input/sacct.txt` |
+| `scontrol show job …` | `input/scontrol-show-job.txt` |
+| `scontrol show node …` | `input/scontrol-show-node.txt` |
+| `journalctl …` | `input/journalctl.txt` |
+| `nvidia-smi` | `input/nvidia-smi.txt` |
+| `ibstat` | `input/ibstat.txt` |
+| a file read by path | `input/<basename>` — e.g. `slurmd.log`, `slurm-918273.err` |
+
+A command with no matching file behaves exactly as an absent binary does. That
+is deliberate: every fixture that omits a producer exercises the
+missing-capability path for free, which is the path invariant §2.6 is about.
+
+Capture what cairn would actually run, not what is quickest to type.
+`journalctl -o short-iso` carries a year and a UTC offset; the bare `journalctl`
+default carries neither, and a fixture built from it silently makes every
+timestamp ambiguous.
+
 ## Adding an incident
 
 ```sh
@@ -41,7 +65,10 @@ That scaffolds the directory and prints the full checklist. In outline:
    conventions are below.
 3. **`make scan-fixtures`.** Clean, or every finding accounted for.
 4. **Fill in `meta.yaml`.** Every `TODO` goes. `expected_root_cause` is the eval
-   target and deserves real thought.
+   target and deserves real thought. Set `incident.job` and `incident.node`: the
+   replay harness needs a job to investigate, and takes it from here rather than
+   from the expected events — otherwise it would be handing the collector the
+   answer it is meant to be finding.
 5. **Write `expected/events.json`.** Canonical form; the loader checks.
 6. **`make check`.**
 
@@ -126,4 +153,33 @@ unattributed redaction is an unreviewed one.
   contradicts itself, a down port reporting a meaningless rate. Collectors have
   to survive these, and a tidied fixture does not test that they do.
 - **It exercises the join.** Events from more than one producer, ideally with one
-  that carries no jobid at all.
+  that carries no jobid at all. `005-ib-link-flap` has exactly one event carrying
+  the job id and seven that do not; a join that returns only the first has
+  returned the user the one thing they already knew.
+
+---
+
+## Writing the expected stream
+
+Derive it from the **input**, not from the incident.
+
+Every one of these fixtures was originally authored from the incident — what
+happened, written down as events — and building the collectors showed several of
+them to be wrong in ways that a reader would never have caught:
+
+- `001` expected a `cgroup` attribute that appears nowhere in its captured
+  journal, and had the MaxRSS conversion off by one mebibyte.
+- `003` expected a driver mismatch from `nvidia-smi`, which cannot show one: the
+  "CUDA Version" it prints is the highest runtime the driver supports, not the
+  one the job used. Only the job's stderr knows.
+- `002` claimed a partition on the batch step row, where sacct leaves it blank.
+
+An expected stream must contain only what a correct collector could actually
+derive from the files in `input/`. If the incident is explained by something the
+captures do not contain, that belongs in `expected_root_cause` and `notes` — not
+as an event nobody can produce.
+
+The reverse is also worth stating: an expected stream may contain events from
+producers no collector reads yet. `005` still expects its `fabric` event from
+`ibstat`. The replay test compares per-source and reports uncovered producers, so
+the target stays whole while coverage grows toward it.

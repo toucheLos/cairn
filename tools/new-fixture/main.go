@@ -120,6 +120,10 @@ redaction_method: ""   # not required for a synthetic fixture`
 	return fmt.Sprintf(`id: %s
 title: %s
 
+# The redacted cluster name. Recorded here rather than derived from the expected
+# events, because a collector has to be told which cluster it is running against.
+cluster: cluster-a
+
 # synthetic: true means this fixture was authored rather than observed.
 #
 # This flag is load-bearing. Synthetic fixtures exercise the harness and serve as

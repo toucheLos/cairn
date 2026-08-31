@@ -1,11 +1,18 @@
 id: 007-nccl-hang
 title: NCCL collective watchdog fired after a 30-minute AllReduce stall
+cluster: cluster-a
+# What this fixture is about: the job under investigation, and the node the
+# captures were taken on.
+incident:
+  job: "918820"
+  node: node-0047
+
 synthetic: true
 
 expected_classes:
+  - app.nonzero_exit
   - fabric.nccl_timeout
   - unknown
-  - app.nonzero_exit
 
 expected_root_cause: >-
   Rank 6's AllReduce did not complete within the 1800-second watchdog and the job
@@ -16,8 +23,8 @@ expected_root_cause: >-
   CLAUDE.md §8, and answering it needs the fabric counters this capture lacks.
 
 producers:
-  - slurm
   - gpu
+  - slurm
 
 capability: unprivileged
 
@@ -42,7 +49,10 @@ notes: >-
   incident, not settled from one authored example. See the deferred questions in
   schema/CHANGELOG.md.
 
-  The NCCL log lines carry no timestamps of their own. The watchdog event is
-  placed by arithmetic — job start plus elapsed time minus the 1800-second
-  timeout. That imprecision is real and a collector will face it; the join must
-  not assume every producer supplies a usable clock.
+  The NCCL log lines carry no timestamps of their own, so the watchdog event is
+  stamped with the job's end time from sacct — the only clock available. That
+  places it at the abort rather than at the moment the collective stalled, up to
+  thirty minutes earlier. The imprecision is real, it is recorded rather than
+  papered over, and the join must not assume every producer supplies a usable
+  clock. Deriving a more precise time by arithmetic over the timeout duration
+  would look better and be no more true.

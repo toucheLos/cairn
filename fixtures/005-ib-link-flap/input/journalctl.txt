@@ -1,0 +1,6 @@
+2026-03-04T10:02:11+0000 node-0045 kernel: mlx5_core 0000:31:00.0: mlx5_port_module_event:1230:(pid 0): Port module event: module 0, Cable unplugged
+2026-03-04T10:02:11+0000 node-0045 kernel: infiniband mlx5_0: mlx5_ib_event:1082:(pid 0): Port 1 link down
+2026-03-04T10:02:19+0000 node-0045 kernel: infiniband mlx5_0: mlx5_ib_event:1078:(pid 0): Port 1 link up
+2026-03-04T10:02:44+0000 node-0045 kernel: infiniband mlx5_0: mlx5_ib_event:1082:(pid 0): Port 1 link down
+2026-03-04T10:03:02+0000 node-0045 kernel: infiniband mlx5_0: mlx5_ib_event:1078:(pid 0): Port 1 link up
+2026-03-04T10:03:27+0000 node-0045 kernel: infiniband mlx5_0: mlx5_ib_event:1082:(pid 0): Port 1 link down

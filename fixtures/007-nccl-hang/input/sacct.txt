@@ -1,3 +1,2 @@
-JobID           JobName  Partition    Account  AllocCPUS      State ExitCode  Timelimit    Elapsed   NodeList               Start                 End
------------- ---------- ---------- ---------- ---------- ---------- -------- ---------- ---------- ---------- ------------------- -------------------
-918820       pretrain        gpu    acct-03        256     FAILED      1:0   08:00:00   00:31:44  node-0047 2026-03-04T10:20:00 2026-03-04T10:51:44
+JobID|JobName|Partition|Account|AllocCPUS|State|ExitCode|ReqMem|MaxRSS|Timelimit|Elapsed|NodeList|Start|End|User
+918820|pretrain|gpu|acct-03|256|FAILED|1:0|900G||08:00:00|00:31:44|node-0047|2026-03-04T10:20:00|2026-03-04T10:51:44|user-03

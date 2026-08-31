@@ -1,0 +1,13 @@
+JobId=918412 JobName=train.sh
+   UserId=user-01(90001) GroupId=user-01(90001) MCS_label=N/A
+   Priority=4294 Nice=0 Account=acct-01 QOS=normal
+   JobState=FAILED Reason=NonZeroExitCode Dependency=(null)
+   RunTime=00:00:18 TimeLimit=01:00:00 TimeMin=N/A
+   Partition=gpu AllocNode:Sid=login-01:44120
+   NodeList=node-0048 BatchHost=node-0048
+   NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8
+   TRES=cpu=8,mem=64G,node=1,billing=8,gres/gpu=1
+   WorkDir=/home/user-01/train
+   StdErr=/home/user-01/train/slurm-918412.err
+   StdIn=/dev/null
+   StdOut=/home/user-01/train/slurm-918412.out

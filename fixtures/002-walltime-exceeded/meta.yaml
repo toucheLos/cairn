@@ -1,5 +1,12 @@
 id: 002-walltime-exceeded
 title: Job hit its wall clock limit and its batch step was cancelled
+cluster: cluster-a
+# What this fixture is about: the job under investigation, and the node the
+# captures were taken on.
+incident:
+  job: "918301"
+  node: node-0043
+
 synthetic: true
 
 expected_classes:

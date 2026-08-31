@@ -1,10 +1,17 @@
 id: 005-ib-link-flap
 title: InfiniBand port flapping under a marginal cable, killing an MPI job
+cluster: cluster-a
+# What this fixture is about: the job under investigation, and the node the
+# captures were taken on.
+incident:
+  job: "918633"
+  node: node-0045
+
 synthetic: true
 
 expected_classes:
-  - fabric.link_flap
   - app.nonzero_exit
+  - fabric.link_flap
 
 expected_root_cause: >-
   The HCA on node-0045 reported a cable module event and its port then cycled
@@ -13,8 +20,8 @@ expected_root_cause: >-
   — reseat or replace the cable — and the node should be drained, not retried.
 
 producers:
-  - journal
   - fabric
+  - journal
   - slurm
 
 capability: unprivileged

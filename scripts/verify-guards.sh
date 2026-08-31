@@ -88,6 +88,17 @@ sed -i 's/^synthetic: true$/synthetic: false/' fixtures/003-gpu-driver-mismatch/
 expect_fail "unattributed 'real' fixture is rejected" go test ./fixtures -run TestLoadAll
 restore
 
+# 6. The redaction boundary. This is the guard whose failure ships a real
+#    hostname to someone outside the site, so it is verified rather than assumed:
+#    the check plants an identifier and confirms the redactor removes it.
+if go test ./redact -run 'TestNoOriginalSurvives|TestRedactedBundlePassesTheScanner' >/dev/null 2>&1; then
+	printf '  ok    redaction removes every identifier and passes the scanner\n'
+	pass=$((pass + 1))
+else
+	printf '  FAIL  redaction round trip\n'
+	fail=$((fail + 1))
+fi
+
 echo
 if [ "$fail" -ne 0 ]; then
 	echo "$fail guard(s) did not fire. Fix them before trusting any of this."

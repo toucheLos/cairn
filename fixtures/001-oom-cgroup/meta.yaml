@@ -1,5 +1,12 @@
 id: 001-oom-cgroup
 title: Job killed by the cgroup OOM killer after exceeding its memory request
+cluster: cluster-a
+# What this fixture is about: the job under investigation, and the node the
+# captures were taken on.
+incident:
+  job: "918273"
+  node: node-0042
+
 synthetic: true
 
 expected_classes:
@@ -28,8 +35,16 @@ notes: >-
   Authored, not observed. Its purpose is to exercise the harness end to end and
   to serve as the template for real resource.oom incidents.
 
-  Worth noticing: all three events carry the same class from two different
-  producers. The kernel event has no jobid — the OOM killer does not know about
+  Worth noticing: six events carry the same class from two producers, and both
+  sacct rows for the job appear — the allocation and the batch step each recorded
+  OUT_OF_MEMORY, and each is its own observation. The limit comes from the
+  allocation row's ReqMem and the usage from the step row's MaxRSS; no single row
+  carries both, and a collector must not invent an event that merges them.
+
+  This fixture's expected stream was authored before the collector existed and
+  was wrong in two ways: it claimed a cgroup path that appears nowhere in the
+  input, and it had the wrong MaxRSS conversion. Both were caught by replaying
+  the corpus. The kernel event has no jobid — the OOM killer does not know about
   Slurm — so the join has to attach it by (node, time) and by the cgroup path.
   That is exactly the correlation Phase 1 has to get right, and it is why the
   kernel event is kept rather than dropped as redundant.

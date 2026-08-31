@@ -48,14 +48,19 @@ type rule struct {
 	allow func(match string) bool
 }
 
-// Pseudonym conventions used by redacted fixtures. Values matching these are the
-// *output* of redaction and must not be flagged, or every correctly redacted
-// fixture would fail the scan.
+// Pseudonym conventions. Values matching these are the *output* of redaction and
+// must not be flagged, or every correctly redacted fixture would fail the scan.
+//
+// Two conventions coexist, and both are accepted here. Fixtures are redacted by
+// hand, where a human assigns short ordinals (node-0042). The automated redactor
+// derives eight-digit pseudonyms by HMAC (node-41938274), because it has to
+// produce the same pseudonym for the same host across bundles without keeping
+// shared state between runs. Widths differ; the shape does not.
 var (
-	pseudoNode    = regexp.MustCompile(`^node-[0-9]{2,6}$`)
-	pseudoUser    = regexp.MustCompile(`^user-[0-9]{2,4}$`)
-	pseudoAccount = regexp.MustCompile(`^acct-[0-9]{2,4}$`)
-	pseudoCluster = regexp.MustCompile(`^cluster-[a-z0-9]{1,8}$`)
+	pseudoNode    = regexp.MustCompile(`^node-[0-9]{2,12}$`)
+	pseudoUser    = regexp.MustCompile(`^user-[0-9]{2,12}$`)
+	pseudoAccount = regexp.MustCompile(`^acct-[0-9]{2,12}$`)
+	pseudoCluster = regexp.MustCompile(`^cluster-(?:[a-z]|[0-9]{2,12})$`)
 )
 
 // IsPseudonym reports whether s is already a redaction placeholder.

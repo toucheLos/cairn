@@ -1,3 +1,2 @@
-JobID           JobName  Partition    Account  AllocCPUS      State ExitCode   NodeList               Start                 End
------------- ---------- ---------- ---------- ---------- ---------- -------- ---------- ------------------- -------------------
-918714         solve.sh      normal    acct-01         56     FAILED    1:917  node-0046 2026-03-04T10:31:01 2026-03-04T10:31:03
+JobID|JobName|Partition|Account|AllocCPUS|State|ExitCode|ReqMem|MaxRSS|Timelimit|Elapsed|NodeList|Start|End|User
+918714|solve.sh|normal|acct-01|56|FAILED|1:917|4G||02:00:00|00:00:02|node-0046|2026-03-04T10:31:01|2026-03-04T10:31:03|user-01

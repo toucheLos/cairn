@@ -49,6 +49,15 @@ type Meta struct {
 	ID    string `yaml:"id"`
 	Title string `yaml:"title"`
 
+	// Cluster is the redacted cluster name the incident came from.
+	//
+	// It is recorded here rather than derived from the expected events because a
+	// collector has to be *told* which cluster it is running against — a cluster
+	// name is site configuration, not something sacct output reveals. Deriving it
+	// from the expected stream would let a replay harness quietly supply the
+	// answer it is meant to be checking.
+	Cluster string `yaml:"cluster"`
+
 	// Synthetic marks a fixture that was authored rather than observed.
 	//
 	// This flag is load-bearing, not documentation. Synthetic fixtures exercise
@@ -66,6 +75,19 @@ type Meta struct {
 	// that produces every right class and the wrong conclusion has still failed.
 	ExpectedRootCause string `yaml:"expected_root_cause"`
 
+	// Incident says what this fixture is about: which job, and which node the
+	// captures were taken on.
+	//
+	// A collector is invoked with a job to investigate — that is the whole shape
+	// of `cairn context --job <id>` — so a replay harness has to supply one.
+	// Deriving it from the expected events would let the harness hand the
+	// collector the answer it is meant to be finding.
+	//
+	// Node doubles as the capture host. Log files written by a daemon carry no
+	// hostname of their own, so events parsed out of slurmd.log inherit the node
+	// the file was read from.
+	Incident Incident `yaml:"incident"`
+
 	Producers  []string   `yaml:"producers"`
 	Capability Capability `yaml:"capability"`
 	Scheduler  Scheduler  `yaml:"scheduler"`
@@ -77,6 +99,12 @@ type Meta struct {
 	RedactionMethod string `yaml:"redaction_method"`
 
 	Notes string `yaml:"notes"`
+}
+
+// Incident identifies what a fixture is about.
+type Incident struct {
+	Job  string `yaml:"job"`
+	Node string `yaml:"node"`
 }
 
 // Fixture is a loaded incident.
@@ -221,6 +249,9 @@ func (f *Fixture) Validate() error {
 	if f.Meta.Title == "" {
 		return fail("meta.title is empty")
 	}
+	if f.Meta.Cluster == "" {
+		return fail("meta.cluster is empty")
+	}
 	if f.Meta.ExpectedRootCause == "" {
 		return fail("meta.expected_root_cause is empty; it is the eval target, not a comment")
 	}
@@ -228,6 +259,11 @@ func (f *Fixture) Validate() error {
 	case CapUnprivileged, CapRoot:
 	default:
 		return fail("meta.capability is %q, want %q or %q", f.Meta.Capability, CapUnprivileged, CapRoot)
+	}
+	if f.Meta.Incident.Job != "" {
+		if _, err := schema.ParseJobID(f.Meta.Incident.Job); err != nil {
+			return fail("meta.incident.job: %w", err)
+		}
 	}
 	if len(f.InputFiles) == 0 {
 		return fail("%s/ is empty; a fixture with no producer output tests nothing", inputDir)
@@ -290,14 +326,13 @@ func (f *Fixture) Validate() error {
 		}
 	}
 
-	// Every event must belong to the same cluster: a fixture is one incident on
-	// one cluster, and a stray cluster name is a redaction slip.
-	if len(f.Expected) > 0 {
-		cluster := f.Expected[0].Cluster
-		for _, e := range f.Expected {
-			if e.Cluster != cluster {
-				return fail("expected events span more than one cluster (%q and %q)", cluster, e.Cluster)
-			}
+	// Every event must belong to the cluster the meta declares. A fixture is one
+	// incident on one cluster; a stray cluster name is a redaction slip, and a
+	// declaration that disagrees with the events is a fixture nobody re-read.
+	for _, e := range f.Expected {
+		if string(e.Cluster) != f.Meta.Cluster {
+			return fail("meta.cluster is %q but an expected event has cluster %q",
+				f.Meta.Cluster, e.Cluster)
 		}
 	}
 

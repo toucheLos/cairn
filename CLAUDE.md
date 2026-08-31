@@ -111,9 +111,27 @@ what each collector can and cannot see, and why.
 
 Phase 0.3 is the test suite *and* the eval set. Build it before the code it tests.
 
-Do not start Phase 1 on the strength of the authored fixtures. They prove the
-harness runs; they prove nothing about whether cairn classifies real incidents
-correctly, and a collector tuned to pass them is tuned to pass our own guesses.
+Do not treat the authored fixtures as evidence. They prove the harness runs and
+the collectors parse; they prove nothing about whether cairn classifies real
+incidents correctly, and a collector tuned to pass them is tuned to pass our own
+guesses.
+
+**Phase 1 — substrate.** In progress.
+
+- [x] Collector contract, capability model, and the Env abstraction that lets
+      every collector be replayed against the corpus without a cluster
+- [x] slurm collector — sacct (parsable and aligned), scontrol, job stderr
+- [x] journal collector — journald and the slurmd/slurmctld logs
+- [x] gpu collector — nvidia-smi
+- [x] Redaction layer, built now rather than retrofitted
+- [x] The join — clock skew, node-without-jobid, jobid-without-node, array and
+      heterogeneous jobs
+- [ ] fabric, storage, and bmc collectors (not in the §6 scope for Phase 1;
+      fixture 005 still carries one uncovered `fabric` event)
+
+Building the collectors corrected three fixtures whose expected streams had been
+authored from the incident rather than from the captured input. See
+`fixtures/README.md`, "Writing the expected stream".
 
 ---
 

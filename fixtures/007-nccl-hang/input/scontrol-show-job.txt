@@ -1,0 +1,13 @@
+JobId=918820 JobName=pretrain
+   UserId=user-03(90003) GroupId=user-03(90003) MCS_label=N/A
+   Priority=8812 Nice=0 Account=acct-03 QOS=normal
+   JobState=FAILED Reason=NonZeroExitCode Dependency=(null)
+   RunTime=00:31:44 TimeLimit=08:00:00 TimeMin=N/A
+   Partition=gpu AllocNode:Sid=login-02:19833
+   NodeList=node-0047 BatchHost=node-0047
+   NumNodes=1 NumCPUs=256 NumTasks=16 CPUs/Task=16
+   TRES=cpu=256,mem=900G,node=1,billing=256,gres/gpu=8
+   WorkDir=/home/user-03/pretrain
+   StdErr=/home/user-03/pretrain/slurm-918820.err
+   StdIn=/dev/null
+   StdOut=/home/user-03/pretrain/slurm-918820.out

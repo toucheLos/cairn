@@ -1,11 +1,18 @@
 id: 006-munge-auth-failure
 title: Munge credentials rejected as expired because the node's clock had drifted
+cluster: cluster-a
+# What this fixture is about: the job under investigation, and the node the
+# captures were taken on.
+incident:
+  job: "918714"
+  node: node-0046
+
 synthetic: true
 
 expected_classes:
+  - app.nonzero_exit
   - auth.munge
   - config.clock_skew
-  - app.nonzero_exit
 
 expected_root_cause: >-
   node-0046's clock was 312 seconds fast. Munge credentials have a short validity

@@ -150,7 +150,10 @@ func TestLineAndColumnAreReported(t *testing.T) {
 }
 
 func TestIsPseudonym(t *testing.T) {
-	for _, s := range []string{"node-0042", "user-01", "acct-01", "cluster-a"} {
+	for _, s := range []string{
+		"node-0042", "user-01", "acct-01", "cluster-a", // hand-redaction ordinals
+		"node-41938274", "user-00291837", "acct-71620045", "cluster-00483712", // machine-derived
+	} {
 		if !IsPseudonym(s) {
 			t.Errorf("%q should be recognized as a pseudonym", s)
 		}

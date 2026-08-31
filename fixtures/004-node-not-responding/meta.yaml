@@ -1,10 +1,17 @@
 id: 004-node-not-responding
 title: Node stopped responding to the controller and the job was lost
+cluster: cluster-a
+# What this fixture is about: the job under investigation, and the node the
+# captures were taken on.
+incident:
+  job: "918520"
+  node: node-0044
+
 synthetic: true
 
 expected_classes:
-  - sched.node_fail
   - sched.cancelled
+  - sched.node_fail
 
 expected_root_cause: >-
   node-0044 stopped answering slurmctld. After thirty seconds the controller

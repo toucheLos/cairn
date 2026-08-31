@@ -1,3 +1,2 @@
-JobID           JobName  Partition    Account  AllocCPUS      State ExitCode   NodeList               Start                 End
------------- ---------- ---------- ---------- ---------- ---------- -------- ---------- ------------------- -------------------
-918633           cfd.sh      normal    acct-02        224     FAILED     1:0  node-0045 2026-03-04T09:58:03 2026-03-04T10:03:31
+JobID|JobName|Partition|Account|AllocCPUS|State|ExitCode|ReqMem|MaxRSS|Timelimit|Elapsed|NodeList|Start|End|User
+918633|cfd.sh|normal|acct-02|224|FAILED|1:0|8G||04:00:00|00:05:28|node-0045|2026-03-04T09:58:03|2026-03-04T10:03:31|user-02

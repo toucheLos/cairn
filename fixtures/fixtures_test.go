@@ -189,6 +189,7 @@ func TestFixtureIDsAreUniqueAndOrdered(t *testing.T) {
 func TestValidateCatchesBrokenFixtures(t *testing.T) {
 	const goodMeta = `id: 999-probe
 title: probe
+cluster: cluster-a
 synthetic: true
 expected_classes:
   - resource.oom
@@ -259,6 +260,14 @@ notes: built by TestValidateCatchesBrokenFixtures
 		},
 		"unknown capability": {
 			name: "999-probe", meta: replace(goodMeta, "capability: unprivileged", "capability: sudo"),
+			events: goodEvents, hasInpt: true,
+		},
+		"cluster disagrees with the events": {
+			name: "999-probe", meta: replace(goodMeta, "cluster: cluster-a", "cluster: cluster-b"),
+			events: goodEvents, hasInpt: true,
+		},
+		"missing cluster": {
+			name: "999-probe", meta: replace(goodMeta, "cluster: cluster-a", `cluster: ""`),
 			events: goodEvents, hasInpt: true,
 		},
 		"unknown meta key": {
