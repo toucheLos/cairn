@@ -1,0 +1,38 @@
+#!/bin/sh
+# cairn pre-commit hook: refuse to commit unredacted fixture material.
+#
+# It scans the *staged* blob rather than the working tree. A file can be staged
+# clean and then modified, and it is the staged bytes that would be committed.
+#
+# Install with `make install-hooks`. It is a backstop, not the process: fixtures
+# are redacted by hand (CLAUDE.md §3).
+
+set -e
+
+files=$(git diff --cached --name-only --diff-filter=ACM -- 'fixtures/*' | grep -v '\.go$' | grep -v '\.redaction-ok$' || true)
+[ -z "$files" ] && exit 0
+
+if ! command -v go >/dev/null 2>&1; then
+	echo "pre-commit: go not found; cannot scan staged fixtures." >&2
+	echo "Install Go or commit with --no-verify only if you have checked these by hand." >&2
+	exit 1
+fi
+
+status=0
+for f in $files; do
+	if ! git show ":$f" | go run ./redact/scan/cmd/scan-fixtures -name "$f"; then
+		status=1
+	fi
+done
+
+if [ "$status" -ne 0 ]; then
+	cat >&2 <<'MSG'
+
+pre-commit: the staged fixtures contain material that looks unredacted.
+
+Redact by hand (CLAUDE.md §3). If a match is genuinely safe, record it in that
+directory's input/.redaction-ok with a reason — do not silence the rule, and do
+not use --no-verify to get past this.
+MSG
+fi
+exit $status

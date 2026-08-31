@@ -1,0 +1,18 @@
+# Go
+/cairn
+/dist/
+*.test
+*.out
+*.prof
+
+# Site-local configuration: generated per deployment, never committed upstream.
+# `cairn init` writes this; admins review and commit it in THEIR repo, not ours.
+site.yaml
+*.local.*
+*.local
+
+# Editor / OS
+.DS_Store
+*.swp
+.idea/
+.vscode/

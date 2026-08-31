@@ -1,0 +1,5 @@
+# Reviewed exceptions for this directory. Each line suppresses one rule for one
+# exact matched string. Suppressions do not apply to subdirectories.
+#
+# Format: RULE  MATCHED-TEXT  # why this is safe
+account-code MT4123 # Mellanox/NVIDIA HCA model designator, not an allocation code

@@ -1,0 +1,9 @@
+# Normalize to LF in the repository for everything text-like.
+* text=auto eol=lf
+
+# Golden files are compared byte-for-byte. Never let git rewrite them.
+fixtures/**/expected/** -text
+schema/testdata/** -text
+
+# Fixture inputs are captured producer output. Preserve exactly as redacted.
+fixtures/**/input/** -text

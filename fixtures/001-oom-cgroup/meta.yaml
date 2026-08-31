@@ -1,0 +1,35 @@
+id: 001-oom-cgroup
+title: Job killed by the cgroup OOM killer after exceeding its memory request
+synthetic: true
+
+expected_classes:
+  - resource.oom
+
+expected_root_cause: >-
+  The job requested 8G and its Python process grew to roughly the same size. The
+  kernel's cgroup OOM killer terminated it. This is a user resource-request
+  problem, not a node fault: the node behaved correctly, and the remediation is a
+  larger --mem or a smaller working set.
+
+producers:
+  - journal
+  - slurm
+
+capability: unprivileged
+
+scheduler:
+  name: slurm
+  version: "23.11.6"
+
+redacted_by: ""
+redaction_method: ""
+
+notes: >-
+  Authored, not observed. Its purpose is to exercise the harness end to end and
+  to serve as the template for real resource.oom incidents.
+
+  Worth noticing: all three events carry the same class from two different
+  producers. The kernel event has no jobid — the OOM killer does not know about
+  Slurm — so the join has to attach it by (node, time) and by the cgroup path.
+  That is exactly the correlation Phase 1 has to get right, and it is why the
+  kernel event is kept rather than dropped as redundant.

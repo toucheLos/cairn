@@ -1,0 +1,48 @@
+id: 007-nccl-hang
+title: NCCL collective watchdog fired after a 30-minute AllReduce stall
+synthetic: true
+
+expected_classes:
+  - fabric.nccl_timeout
+  - unknown
+  - app.nonzero_exit
+
+expected_root_cause: >-
+  Rank 6's AllReduce did not complete within the 1800-second watchdog and the job
+  aborted after thirty wasted minutes on 256 allocated CPUs and their GPUs. The
+  captured evidence identifies the stalled rank and the operation; it does not by
+  itself distinguish a fabric fault from a straggler rank or an application
+  deadlock. For a tenant on rented hardware this is the attribution question in
+  CLAUDE.md §8, and answering it needs the fabric counters this capture lacks.
+
+producers:
+  - slurm
+  - gpu
+
+capability: unprivileged
+
+scheduler:
+  name: slurm
+  version: "23.11.6"
+
+redacted_by: ""
+redaction_method: ""
+
+notes: >-
+  Authored, not observed.
+
+  This fixture declares `unknown` as an expected class, and that is a finding
+  rather than a defect. The nvidia-smi capture shows 73 GiB of device memory held
+  at 0% utilization, which is the clearest single signature of a collective hang
+  — and cairn has no class for it. Recording it as `unknown` keeps the evidence
+  in the bundle and keeps the gap visible; inventing a class to make the fixture
+  look tidy would hide it.
+
+  Whether "allocated but idle" earns a member of its own is deferred to a real
+  incident, not settled from one authored example. See the deferred questions in
+  schema/CHANGELOG.md.
+
+  The NCCL log lines carry no timestamps of their own. The watchdog event is
+  placed by arithmetic — job start plus elapsed time minus the 1800-second
+  timeout. That imprecision is real and a collector will face it; the join must
+  not assume every producer supplies a usable clock.

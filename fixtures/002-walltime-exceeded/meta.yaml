@@ -1,0 +1,35 @@
+id: 002-walltime-exceeded
+title: Job hit its wall clock limit and its batch step was cancelled
+synthetic: true
+
+expected_classes:
+  - resource.walltime_exceeded
+  - sched.cancelled
+
+expected_root_cause: >-
+  The job's two-hour limit expired twelve seconds into what would have been its
+  final iteration. Slurm signalled the step and recorded TIMEOUT. Nothing failed;
+  the limit was simply too short for the work.
+
+producers:
+  - journal
+  - slurm
+
+capability: unprivileged
+
+scheduler:
+  name: slurm
+  version: "23.11.6"
+
+redacted_by: ""
+redaction_method: ""
+
+notes: >-
+  Authored, not observed.
+
+  This fixture exists partly to pin down a distinction that is easy to get wrong:
+  two classes, one cause. The batch step is recorded as sched.cancelled because
+  that is what sacct observed, while the job is recorded as
+  resource.walltime_exceeded. Neither is the diagnosis. Reporting the cancelled
+  step as the reason the job died would be a real classification error, and it is
+  the kind a rule set will make unless the corpus contains this shape.

@@ -1,0 +1,40 @@
+cairn
+Copyright 2026 Carlos Eckert
+
+This product includes software developed by Carlos Eckert.
+
+--------------------------------------------------------------------------------
+SCOPE OF THE APACHE-2.0 LICENSE IN THIS REPOSITORY
+--------------------------------------------------------------------------------
+
+The Apache License, Version 2.0 in the accompanying LICENSE file covers the
+SOURCE CODE of this repository.
+
+The following are NOT licensed under Apache-2.0 and are reserved pending a
+separate licensing decision:
+
+  fixtures/   the failure corpus, excluding fixtures marked `synthetic: true`
+  taxonomy/   signature -> cause -> remediation rules
+
+Fixtures carrying `synthetic: true` in their meta.yaml are authored test data
+and are covered by the Apache-2.0 license alongside the source code.
+
+This scoping is deliberate. See CLAUDE.md §9: the CLI is expected to be cloned
+and is given away as distribution; the accumulated corpus and the domain
+judgment encoded in the taxonomy are not. A single unscoped root license would
+have granted away both.
+
+--------------------------------------------------------------------------------
+PROVENANCE AND DATA HYGIENE
+--------------------------------------------------------------------------------
+
+Per CLAUDE.md §3, this project is developed on personal hardware, under a
+personal account, outside employment hours.
+
+No real hostname, username, account code, project code, or raw accounting row
+is committed to this repository. Incident fixtures derived from real systems
+are redacted by hand before they land, and every fixture is checked by the
+scanner in redact/scan/ before commit.
+
+This project is not described as "trained on" any institution's data, because
+it is not.

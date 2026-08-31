@@ -1,0 +1,5 @@
+[
+  {"ts":"2026-03-04T09:31:14.000000000Z","cluster":"cluster-a","node":"node-0048","jobid":null,"source":"gpu","class":"gpu.driver_mismatch","detail":{"signature":"nvidia.driver.runtime_version_mismatch","attrs":{"cuda_version":"12.2","driver_version":"535.104.05","expected_driver_version":"550.54.15","gpu_index":"0"}}},
+  {"ts":"2026-03-04T09:31:20.000000000Z","cluster":"cluster-a","node":"node-0048","jobid":{"raw":"918412","base":918412},"source":"slurm","class":"app.nonzero_exit","detail":{"signature":"slurm.sacct.state.FAILED","attrs":{"account":"acct-01","exit_code":"1:0","partition":"gpu","state":"FAILED"}}},
+  {"ts":"2026-03-04T09:31:20.000000000Z","cluster":"cluster-a","node":"node-0048","jobid":{"raw":"918412.batch","base":918412,"step":"batch"},"source":"slurm","class":"gpu.driver_mismatch","detail":{"signature":"cuda.runtime.driver_insufficient","attrs":{"cuda_version":"12.4","driver_version":"535.104.05"}}}
+]

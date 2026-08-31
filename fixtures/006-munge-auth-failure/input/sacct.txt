@@ -1,0 +1,3 @@
+JobID           JobName  Partition    Account  AllocCPUS      State ExitCode   NodeList               Start                 End
+------------ ---------- ---------- ---------- ---------- ---------- -------- ---------- ------------------- -------------------
+918714         solve.sh      normal    acct-01         56     FAILED    1:917  node-0046 2026-03-04T10:31:01 2026-03-04T10:31:03

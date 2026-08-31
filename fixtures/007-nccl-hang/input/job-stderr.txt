@@ -1,0 +1,7 @@
+node-0047:41205:41400 [2] NCCL INFO Bootstrap : Using ibp1s0
+node-0047:41205:41400 [2] NCCL INFO NET/IB : Using [0]mlx5_0:1/IB [RO]; OOB ibp1s0
+node-0047:41205:41400 [2] NCCL INFO Using network IB
+node-0047:41205:41400 [2] NCCL INFO comm 0x55d1c8 rank 6 nranks 16 busId 47000 commId 0x9f2a - Init COMPLETE
+[rank6]: Watchdog caught collective operation timeout: WorkNCCL(SeqNum=8814, OpType=ALLREDUCE, NumelIn=268435456, NumelOut=268435456, Timeout(ms)=1800000) ran for 1800022 milliseconds before timing out.
+[rank6]: To copy the stack trace, run with TORCH_DISTRIBUTED_DEBUG=DETAIL
+node-0047:41205:41400 [2] NCCL WARN [Rank 6] Watchdog caught collective operation timeout

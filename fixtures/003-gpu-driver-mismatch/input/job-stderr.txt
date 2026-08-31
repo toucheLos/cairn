@@ -1,0 +1,6 @@
+Loading module cuda/12.4.0
++ python3 train.py
+Traceback (most recent call last):
+  File "train.py", line 12, in <module>
+    torch.cuda.init()
+RuntimeError: CUDA driver version is insufficient for CUDA runtime version

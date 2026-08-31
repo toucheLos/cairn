@@ -1,0 +1,62 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27'
+          check-latest: false
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Gofmt
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then
+            echo "these files are not gofmt-clean:"
+            echo "$out"
+            exit 1
+          fi
+
+      # Covers the schema golden files (enum append-only, canonical encoding,
+      # determinism), the fixture loader and validator, and the redaction rules.
+      - name: Test
+        run: go test ./...
+
+      # Deliberately redundant with the test above: this is the check whose
+      # failure is irreversible once a commit is pushed, so it runs on its own
+      # and reports on its own.
+      - name: Scan the corpus for unredacted material
+        run: go run ./redact/scan/cmd/scan-fixtures fixtures
+
+      # Golden files must be committed in the state the code generates. A
+      # regenerated-but-uncommitted golden file means the enum or the encoding
+      # changed without the diff being reviewed.
+      - name: Golden files are up to date
+        run: |
+          go test ./schema -update
+          if ! git diff --exit-code -- schema/testdata; then
+            echo
+            echo "Golden files are stale. Run 'make golden', read the diff, and commit it."
+            exit 1
+          fi
+
+      # Proves each guard fails when violated, rather than trusting that it would.
+      - name: Verify guards fire
+        run: ./scripts/verify-guards.sh

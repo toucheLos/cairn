@@ -1,0 +1,39 @@
+id: 003-gpu-driver-mismatch
+title: CUDA 12.4 runtime on a node still running a 535-generation driver
+synthetic: true
+
+expected_classes:
+  - gpu.driver_mismatch
+  - app.nonzero_exit
+
+expected_root_cause: >-
+  The job loaded a CUDA 12.4 module, which requires a 550-generation driver. The
+  node is running 535.104.05, which supports CUDA up to 12.2. The job failed at
+  context creation. The node is healthy in every other respect, which is what
+  makes this class of failure hard to see: nothing is broken, two things merely
+  disagree.
+
+producers:
+  - gpu
+  - slurm
+
+capability: unprivileged
+
+scheduler:
+  name: slurm
+  version: "23.11.6"
+
+redacted_by: ""
+redaction_method: ""
+
+notes: >-
+  Authored, not observed.
+
+  Two events carry class gpu.driver_mismatch from two different sources — the gpu
+  collector reading nvidia-smi, and the slurm collector reading the job's stderr.
+  Class and source are independent axes, and a fixture set where they always move
+  together would let that error go unnoticed.
+
+  expected_driver_version on the nvidia-smi event is the minimum driver for the
+  CUDA runtime the job asked for. Deriving it from fleet siblings instead is
+  Phase 3 work (CLAUDE.md §7, configuration drift detection).

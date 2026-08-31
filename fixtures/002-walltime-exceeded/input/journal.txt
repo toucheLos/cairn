@@ -1,0 +1,4 @@
+Mar 04 09:20:56 node-0043 slurmstepd[8821]: error: *** JOB 918301 ON node-0043 CANCELLED AT 2026-03-04T09:20:56 DUE TO TIME LIMIT ***
+Mar 04 09:20:56 node-0043 slurmstepd[8821]: Sent signal 15 to StepId=918301.batch
+Mar 04 09:20:57 node-0043 slurmstepd[8821]: error: Failed to send signal 15 to 8830: No such process
+Mar 04 09:20:57 node-0043 slurmd[3312]: Job 918301 killed, done

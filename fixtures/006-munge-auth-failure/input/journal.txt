@@ -1,0 +1,3 @@
+Mar 04 10:31:02 node-0046 munged[2211]: Expired credential from uid=0 gid=0
+Mar 04 10:31:02 node-0046 chronyd[1180]: System clock wrong by 312.004521 seconds
+Mar 04 10:31:03 node-0046 slurmd[3312]: error: Unable to register: Protocol authentication error

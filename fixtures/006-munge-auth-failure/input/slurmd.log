@@ -1,0 +1,5 @@
+[2026-03-04T10:31:02.884] error: Munge decode failed: Expired credential
+[2026-03-04T10:31:02.884] auth/munge: _print_cred: ENCODED: Wed Mar 04 10:25:41 2026
+[2026-03-04T10:31:02.884] auth/munge: _print_cred: DECODED: Wed Mar 04 10:31:02 2026
+[2026-03-04T10:31:02.885] error: slurm_receive_msg_and_forward: REQUEST_LAUNCH_TASKS has authentication error: Expired credential
+[2026-03-04T10:31:02.885] error: slurm_receive_msg_and_forward: Protocol authentication error

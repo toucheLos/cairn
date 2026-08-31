@@ -1,0 +1,5 @@
+[
+  {"ts":"2026-03-04T10:50:44.000000000Z","cluster":"cluster-a","node":"node-0047","jobid":{"raw":"918820","base":918820},"source":"slurm","class":"fabric.nccl_timeout","detail":{"signature":"nccl.watchdog.collective_timeout","attrs":{"comm":"0x9f2a","op":"ALLREDUCE","rank":"6","timeout_seconds":"1800","world_size":"16"}}},
+  {"ts":"2026-03-04T10:51:40.000000000Z","cluster":"cluster-a","node":"node-0047","jobid":null,"source":"gpu","class":"unknown","detail":{"signature":"nvidia.smi.allocated_but_idle","attrs":{"severity":"warn"}}},
+  {"ts":"2026-03-04T10:51:44.000000000Z","cluster":"cluster-a","node":"node-0047","jobid":{"raw":"918820","base":918820},"source":"slurm","class":"app.nonzero_exit","detail":{"signature":"slurm.sacct.state.FAILED","attrs":{"account":"acct-03","exit_code":"1:0","partition":"gpu","state":"FAILED"}}}
+]

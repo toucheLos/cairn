@@ -1,0 +1,47 @@
+id: 006-munge-auth-failure
+title: Munge credentials rejected as expired because the node's clock had drifted
+synthetic: true
+
+expected_classes:
+  - auth.munge
+  - config.clock_skew
+  - app.nonzero_exit
+
+expected_root_cause: >-
+  node-0046's clock was 312 seconds fast. Munge credentials have a short validity
+  window, so every credential the node presented was rejected as expired, slurmd
+  could not register, and the job failed at launch. The remediation is to fix time
+  synchronization on the node. Redistributing the munge key — the usual first
+  guess — would change nothing.
+
+producers:
+  - journal
+  - slurm
+
+capability: unprivileged
+
+scheduler:
+  name: slurm
+  version: "23.11.6"
+
+redacted_by: ""
+redaction_method: ""
+
+notes: >-
+  Authored, not observed.
+
+  This fixture changed the schema. While writing it, the causal observation — a
+  host clock that is wrong — had no class to go in, and would have been recorded
+  as `unknown` while three auth.munge events sat above it looking like the answer.
+  `config.clock_skew` was added to the enum as a result. See schema/CHANGELOG.md.
+  That is the intended direction of travel: fixtures argue with the enum before
+  any collector code exists to make the argument expensive.
+
+  The evaluation target here is specifically that the cause is the clock and not
+  the key. A run that reports "munge authentication failure" has described the
+  symptom and will send an admin to the wrong remediation.
+
+  The sacct row is classed app.nonzero_exit, not auth.munge. That is deliberate:
+  sacct observed a nonzero exit and nothing more. Classing it auth.munge would be
+  recording a conclusion on an event, which is the thing schema/DESIGN.md §1
+  rules out.

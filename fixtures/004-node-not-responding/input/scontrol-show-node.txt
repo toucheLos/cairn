@@ -1,0 +1,9 @@
+NodeName=node-0044 Arch=x86_64 CoresPerSocket=28
+   CPUAlloc=0 CPUEfctv=56 CPUTot=56 CPULoad=N/A
+   AvailableFeatures=avx512,ib
+   ActiveFeatures=avx512,ib
+   OS=Linux 5.14.0 #1 SMP PREEMPT_DYNAMIC
+   RealMemory=257000 AllocMem=0 FreeMem=N/A Sockets=2 Boards=1
+   State=DOWN* ThreadsPerCore=1 TmpDisk=0 Weight=1 Owner=N/A MCS_label=N/A
+   BootTime=None SlurmdStartTime=None
+   Reason=Not responding [slurm@2026-03-04T09:42:31]

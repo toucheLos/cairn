@@ -1,0 +1,39 @@
+id: 004-node-not-responding
+title: Node stopped responding to the controller and the job was lost
+synthetic: true
+
+expected_classes:
+  - sched.node_fail
+  - sched.cancelled
+
+expected_root_cause: >-
+  node-0044 stopped answering slurmctld. After thirty seconds the controller
+  marked it DOWN and the running job was lost. Requeue was refused because the
+  job was submitted with --no-requeue. The cause of the node's silence is not
+  visible from the controller's vantage point — that is the point of the fixture.
+
+producers:
+  - journal
+  - slurm
+
+capability: unprivileged
+
+scheduler:
+  name: slurm
+  version: "23.11.6"
+
+redacted_by: ""
+redaction_method: ""
+
+notes: >-
+  Authored, not observed.
+
+  This is the fixture that should stop a classifier from overclaiming. Everything
+  here is the controller's view; nothing in it explains *why* the node went
+  quiet. A correct answer says the node stopped responding and names what would
+  distinguish the possibilities — BMC power event, kernel panic, fabric
+  partition. An answer that confidently picks one has hallucinated, and this
+  fixture is how that gets caught.
+
+  Note the node events carry no jobid: node-without-jobid is ordinary, and the
+  join has to attach them to job 918520 by node and time window.
