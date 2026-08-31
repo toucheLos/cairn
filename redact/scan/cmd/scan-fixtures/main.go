@@ -23,7 +23,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/toucheLos/cairn/redact/scan"
+	"github.com/touchelos/cairn/redact/scan"
 )
 
 func main() {

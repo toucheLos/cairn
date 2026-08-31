@@ -1,4 +1,4 @@
-module github.com/toucheLos/cairn
+module github.com/touchelos/cairn
 
 go 1.27.0
 

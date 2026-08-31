@@ -18,7 +18,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/toucheLos/cairn/schema"
+	"github.com/touchelos/cairn/schema"
 )
 
 func main() {

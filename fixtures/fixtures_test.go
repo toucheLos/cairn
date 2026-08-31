@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/toucheLos/cairn/redact/scan"
-	"github.com/toucheLos/cairn/schema"
+	"github.com/touchelos/cairn/redact/scan"
+	"github.com/touchelos/cairn/schema"
 )
 
 const root = "."

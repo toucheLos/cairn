@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/toucheLos/cairn/schema"
+	"github.com/touchelos/cairn/schema"
 )
 
 // Phase 0 ships nothing runnable. This exists so that `go build ./...` covers

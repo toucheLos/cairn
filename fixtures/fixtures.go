@@ -19,7 +19,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/toucheLos/cairn/schema"
+	"github.com/touchelos/cairn/schema"
 	"gopkg.in/yaml.v3"
 )
 
