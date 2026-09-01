@@ -69,10 +69,10 @@ collectors/   capability-gated readers, one per producer
 schema/       the event struct + class enum. Versioned. Change with care.
 join/         correlation on (node, jobid, time)
 redact/       deterministic pseudonymization, applied before anything leaves
-site/         discovery, site.yaml, capability gating
+site/         discovery, site.yaml, capability gating, fleet-relative drift
 taxonomy/     signature → cause → remediation, with confidence
 policy/       default-deny allowlist, dry-run, audit log  (Phase 4)
-cmd/cairn/    context | diff | doctor | init
+cmd/cairn/    init | context | doctor | profile | diff | miss
 ```
 
 **The event schema** is the most important artifact in the project:
@@ -92,6 +92,10 @@ what each collector can and cannot see, and why.
 ---
 
 ## 5. Current phase
+
+**Phase 3 is current.** Phases 0–2 are below with their status; the one
+outstanding item across all of them is Phase 2's dogfooding, which is not
+optional and has not started.
 
 **Phase 0 — foundations.** Nothing is shipped.
 
@@ -155,6 +159,47 @@ lesson is the one §6 already states — the miss log, not our intuition.
 
 Do not skip the dogfooding. Everything above is validated against seven authored
 fixtures and one laptop.
+
+**Phase 3 — site awareness.** The commands run.
+
+- [x] `cairn init` — probes scheduler + version, module system, Spack/EasyBuild
+      roots, distro/kernel/glibc, mounts, fabric, GPU, BMC and existing
+      Prometheus/Ganglia into a reviewable, git-committable `site.yaml`.
+      Refuses to overwrite an admin's corrections without `--force`, and shows
+      the diff instead. Records what it could *not* probe and what that costs.
+- [x] The profile is the context header, reserved out of the token budget for
+      the same reason the capability section is. Absent profile is stated, not
+      left silent.
+- [x] `cairn profile` and `cairn diff <node>` — fleet-relative drift on the §7
+      keys. Refuses below three siblings, requires a strict majority, and
+      reports divergence rather than a verdict.
+- [x] Multi-cluster config: a `site.Set` loads N profiles; `doctor -A` and
+      `diff` work across all of them in one invocation. `context` needs a live
+      scheduler and says it only reached the local one.
+- [ ] **Phase 2's four weeks of dogfooding still have not happened.** Phase 3
+      was therefore built from §6's specification rather than from the miss log,
+      which is what §6 says should drive it. The shape was specified in enough
+      detail for that to be defensible; the priorities *inside* it are still
+      intuition, and the miss log is what would correct them.
+
+Two things this phase changed that were not planned, recorded because both were
+the corpus arguing with the design rather than the other way around:
+
+- **Schema v2 adds the `site` producer.** `config.drift` was registered in v1
+  with `peer_count` and `peer_majority` — the class was there, only the producer
+  was missing, and none of the six existing ones fits a fact cairn derives by
+  comparing profiles it captured itself. See `schema/CHANGELOG.md`.
+- **Redaction leaked storage addresses.** `redact.text` only substitutes
+  identifiers learned from a structured field, and a filesystem server's address
+  never appears in one — only inside a mount source, which is exactly where
+  every Lustre and NFS mount puts it. `cairn diff --redact` shipped
+  `192.0.2.10@o2ib:/lustre` straight through the boundary. Addresses are now
+  pseudonymized structurally. This was in every code path that emits a mount
+  value, not just the new one.
+
+A known gap, found by running `doctor` on this laptop and deliberately left:
+`doctor` reports `N warning(s)` but has no `-v` to show them, while `context`
+has one. The warnings are the miss log.
 
 ---
 

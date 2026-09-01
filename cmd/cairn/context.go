@@ -62,7 +62,18 @@ flags:
 	if err != nil {
 		return err
 	}
-	cluster := common.clusterName()
+
+	// The site profile is loaded before collection because it names the
+	// cluster, and the cluster is stamped on every event as it is produced.
+	set, sitePath, err := common.sites()
+	if err != nil {
+		return err
+	}
+	siteProfile, err := common.profileFor(set)
+	if err != nil {
+		return err
+	}
+	cluster := common.clusterNameWith(siteProfile)
 
 	req := collectors.Request{Cluster: cluster, Job: job}
 	events, results := collectForJob(env, req, *before, *after)
@@ -103,6 +114,14 @@ flags:
 	if err != nil {
 		return err
 	}
+	// The profile goes through the same redactor as the bundle, so a hostname
+	// named in a mount source and the same hostname in an event get the same
+	// pseudonym. Rendering the header from the unredacted profile would put
+	// back exactly what the bundle just removed (CLAUDE.md §10).
+	siteProfile, err = r.Profile(siteProfile)
+	if err != nil {
+		return err
+	}
 
 	if *format == "json" {
 		out, err := bundle.Encode()
@@ -125,8 +144,10 @@ flags:
 	redacted.Nodes = uniqueNodes(bundle.Events)
 
 	fmt.Print(renderText(redacted, results, bundle.Cluster, bundle.Redaction, renderOpts{
-		Budget:  *budgetTk,
-		Verbose: *verbose,
+		Budget:   *budgetTk,
+		Verbose:  *verbose,
+		Site:     siteProfile,
+		SitePath: sitePath,
 	}))
 	return nil
 }

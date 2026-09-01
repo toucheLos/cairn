@@ -330,3 +330,88 @@ func TestHomePathUsernameIsCaught(t *testing.T) {
 		}
 	}
 }
+
+// TestStorageAddressIsCaught covers the leak that `cairn diff --redact` found:
+// a filesystem server's address reaching output because it appears only inside
+// a free-form value, never in a structured field the redactor learns from.
+//
+// This is the normal case rather than an edge case — `192.0.2.10@o2ib:/lustre`
+// and `server:/export` are what every Lustre and NFS mount source looks like.
+func TestStorageAddressIsCaught(t *testing.T) {
+	r, err := redact.New(redact.ModePseudonymize, salt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := schema.Bundle{
+		Cluster:   "cluster-a",
+		Window:    schema.Window{Start: time.Unix(0, 0).UTC(), End: time.Unix(1, 0).UTC()},
+		Redaction: schema.Redaction{Mode: "none"},
+		Events: []schema.Event{{
+			TS: time.Unix(0, 0).UTC(), Cluster: "cluster-a", Node: "compute-01",
+			Source: schema.SourceSite, Class: schema.ClassConfigDrift,
+			Detail: schema.Detail{
+				Signature: "site.drift.mount./scratch",
+				Attrs: map[string]string{
+					"key":           "mount./scratch",
+					"observed":      "(absent)",
+					"expected":      "lustre 192.0.2.10@o2ib:/lustre",
+					"peer_count":    "4",
+					"peer_majority": "4",
+				},
+			},
+		}},
+	}
+	out, err := r.Bundle(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := out.Events[0].Detail.Attrs["expected"]
+	if strings.Contains(got, "192.0.2.10") {
+		t.Errorf("a storage server address survived redaction: %q", got)
+	}
+	// Structure is diagnostic and must survive: an admin has to still be able
+	// to see that this was a Lustre mount over o2ib.
+	for _, want := range []string{"lustre ", "@o2ib:/lustre"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the mount source lost its shape: %q lacks %q", got, want)
+		}
+	}
+}
+
+// TestVersionsAreNotMistakenForAddresses: a four-part version has the same
+// shape as a dotted quad, and pseudonymizing a driver version would destroy the
+// single most useful value in a GPU drift report.
+func TestVersionsAreNotMistakenForAddresses(t *testing.T) {
+	r, err := redact.New(redact.ModePseudonymize, salt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := schema.Bundle{
+		Cluster:   "cluster-a",
+		Window:    schema.Window{Start: time.Unix(0, 0).UTC(), End: time.Unix(1, 0).UTC()},
+		Redaction: schema.Redaction{Mode: "none"},
+		Events: []schema.Event{{
+			TS: time.Unix(0, 0).UTC(), Cluster: "cluster-a", Node: "compute-01",
+			Source: schema.SourceSite, Class: schema.ClassConfigDrift,
+			Detail: schema.Detail{
+				Signature: "site.drift.nvidia.driver_version",
+				Attrs: map[string]string{
+					"key":           "nvidia.driver_version",
+					"observed":      "535.104.05",
+					"expected":      "550.54.14",
+					"peer_count":    "4",
+					"peer_majority": "4",
+				},
+			},
+		}},
+	}
+	out, err := r.Bundle(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	attrs := out.Events[0].Detail.Attrs
+	if attrs["observed"] != "535.104.05" || attrs["expected"] != "550.54.14" {
+		t.Errorf("driver versions were rewritten: observed=%q expected=%q",
+			attrs["observed"], attrs["expected"])
+	}
+}

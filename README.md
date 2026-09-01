@@ -3,11 +3,12 @@
 **cairn answers "why did this job die" in one command, across every cluster you run,
 without root and without shipping your logs anywhere.**
 
-> **Status: Phase 2 — `cairn context` and `cairn doctor` run.**
+> **Status: Phase 3 — `init`, `context`, `doctor`, `profile` and `diff` run.**
 > The binary builds and works, against a live host or a replayed fixture. It has
-> been exercised against a seven-incident corpus and one ordinary Linux box, not
-> against a production cluster. Treat it as early: the failure corpus is still
-> synthetic, so no accuracy claim is made or implied.
+> been exercised against a seven-incident corpus, three site fixtures, and one
+> ordinary Linux box — not against a production cluster. Treat it as early: the
+> failure corpus is still synthetic, so no accuracy claim is made or implied,
+> and the four weeks of dogfooding Phase 2 calls for have not happened.
 
 ---
 
@@ -48,6 +49,7 @@ Not log storage. Not a dashboard. Not an alerting system. Not a scheduler.
 ```sh
 make cairn                 # a static binary, no third-party code linked in
 ./cairn doctor             # what can this host see, and what does each gap cost?
+./cairn init               # probe the stack into a reviewable site.yaml
 ./cairn context --job 12345
 ```
 
@@ -58,15 +60,23 @@ most hosts is more informative than what it can.
 To see the output shape without a cluster, replay a fixture:
 
 ```sh
-make demo
+make demo        # cairn context, on a Munge failure
+make demo-site   # cairn init and cairn diff, on a fixture site
 ```
 
 ```
 cairn context — job 918714 on cluster-a
-schema v1 · 6 events (1 carry this job's id) · 1 node(s)
+schema v2 · 6 events (1 carry this job's id) · 1 node(s)
 window 2026-03-04 10:16:03 .. 2026-03-04 10:36:03 (UTC)
 redaction: none — this bundle contains real host and account names
 nodes: node-0046
+
+SITE       from site.yaml
+  scheduler  slurm 23.02.7
+  modules    lmod
+  os         rocky 9.3, kernel 5.14.0-362.18.1.el9_3.x86_64, glibc 2.34
+  fabric     infiniband 200
+  gpu        nvidia driver 550.54.14, CUDA 12.4 (NVIDIA H100 80GB HBM3)
 
 TIMELINE   * = carries this job's id · blank = node-scoped evidence · ~ = cluster-scoped
   [2026-03-04]
@@ -82,9 +92,73 @@ WHAT CAIRN COULD NOT SEE
 One event carries the job id. The clock skew that actually caused the failure
 does not, and never would have — which is the entire reason the join exists.
 
+The SITE block comes from `site.yaml`, and it is reserved out of the token
+budget: the line that says "this is Slurm 23.02" prevents a wrong answer, so it
+is never dropped to fit two more events. With no profile, cairn says so there
+rather than staying silent and letting a reader assume a stack.
+
 `--redact` pseudonymizes hosts, users and accounts before anything is printed,
 deterministically, so two bundles from the same site stay comparable.
 `--format json` emits the canonical bundle for archival or replay.
+
+## Knowing which cluster you are on
+
+`cairn init` probes the stack — scheduler and version, module system, Spack and
+EasyBuild roots, distro and kernel, mounts, fabric, GPUs — and writes a
+`site.yaml` meant to be read, corrected, and committed:
+
+```yaml
+# The batch system. This is the single most load-bearing value in the file:
+# it is what stops a model answering a Slurm question with PBS syntax.
+scheduler:
+  kind: slurm
+  version: 23.02.7
+  partitions:
+    - batch
+    - gpu
+```
+
+cairn guesses, and a guess nobody has checked is not a site profile — so `init`
+will not overwrite your corrections without `--force`, and shows you what it
+would change instead. The profile becomes the header on every `cairn context`.
+
+The file also records what cairn *could not* probe, and what each gap costs. A
+profile with no `fabric` section would otherwise be ambiguous between "no
+InfiniBand here" and "nobody looked".
+
+## Fleet-relative health checking
+
+A node is unhealthy when it diverges from its 47 siblings, not when it crosses a
+number someone guessed in 2014. `cairn profile` captures one node's drift keys;
+`cairn diff` compares one against the rest.
+
+```sh
+srun -w node[001-048] --ntasks-per-node=1 \
+    sh -c 'cairn profile > profiles/$(hostname -s).json'
+cairn diff node-0046
+```
+
+```
+cairn diff — node-0046 on cluster cluster-a
+4 sibling(s): node-0045 node-0047 node-0048 node-0049
+
+DIVERGENCE FROM SIBLING MAJORITY
+  munge.key_mtime        this node: 2025-08-11
+                         4 of 4 siblings: 2026-02-01
+  nvidia.driver_version  this node: 535.104.05
+                         4 of 4 siblings: 550.54.14
+
+Which side is correct is not something cairn can tell you. A node that
+differs from its siblings may be the only one that got the patch.
+```
+
+That last paragraph is the design, not a disclaimer. cairn reports divergence
+and leaves the verdict to you. Below three siblings it refuses to compare at
+all, because a majority of two is not a fleet norm.
+
+cairn implements no fan-out of its own — `srun`, `pdsh` and `clush` already
+exist, and shipping remote execution would mean an ssh dependency and a second
+read-only boundary to get right.
 
 ## Layout
 
@@ -94,8 +168,8 @@ fixtures/     redacted, pre-classified incidents           <- tests AND eval set
 redact/       deterministic pseudonymization + the pre-commit scanner
 collectors/   capability-gated readers: slurm, journal, gpu
 join/         correlation on (node, jobid, time)
-cmd/cairn/    context · doctor · miss
-site/         discovery, site.yaml, capability gating      (Phase 3)
+site/         discovery, site.yaml, fleet-relative drift
+cmd/cairn/    init · context · doctor · profile · diff · miss
 taxonomy/     signature -> cause -> remediation            (Phase 4)
 policy/       default-deny allowlist, dry-run, audit log   (Phase 4)
 ```

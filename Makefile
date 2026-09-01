@@ -6,7 +6,10 @@
 
 GO      ?= go
 PKG     := ./...
-FIXTURES := fixtures
+# Both corpora are scanned. site/testdata carries captured producer output for
+# the discovery probes, so it is exactly as capable of leaking a hostname or a
+# storage address as fixtures/ is, and CLAUDE.md §3 does not distinguish them.
+FIXTURES := fixtures site/testdata
 
 .PHONY: help
 help:
@@ -18,6 +21,7 @@ help:
 	@echo "  make scan-fixtures   check the corpus for unredacted material"
 	@echo "  make new-fixture     scaffold a fixture   (SLUG=... TITLE=\"...\")"
 	@echo "  make classes         list the class enum and its registered detail keys"
+	@echo "  make demo-site       show \`cairn init\` and \`cairn diff\` on a fixture"
 	@echo "  make golden          regenerate schema golden files, then show the diff"
 	@echo "  make install-hooks   install the pre-commit redaction scanner"
 	@echo "  make verify-guards   prove the guards actually fail when violated"
@@ -68,7 +72,8 @@ classes:
 .PHONY: golden
 golden:
 	$(GO) test ./schema -update
-	@git --no-pager diff --stat -- schema/testdata || true
+	$(GO) test ./site -update
+	@git --no-pager diff --stat -- schema/testdata site/testdata || true
 
 .PHONY: install-hooks
 install-hooks:
@@ -86,7 +91,19 @@ verify-guards:
 # Replay a fixture through the shipped command. This is what `cairn context`
 # looks like to someone using it, which is worth seeing rather than inferring
 # from test output.
+# The site profile is the one generated from site/testdata/slurm-lmod-gpu, which
+# is a real cluster-a profile — so the demo shows the header doing its job
+# rather than reporting its own absence.
 .PHONY: demo
 demo:
-	@CAIRN_CLUSTER=cluster-a CAIRN_NODE=node-0046 $(GO) run ./cmd/cairn context \
-		--job 918714 --fixture fixtures/006-munge-auth-failure --tz UTC
+	@CAIRN_NODE=node-0046 $(GO) run ./cmd/cairn context \
+		--job 918714 --fixture fixtures/006-munge-auth-failure --tz UTC \
+		--site site/testdata/slurm-lmod-gpu.golden.yaml
+
+# The Phase 3 surface, end to end and without a cluster: probe a site, then
+# compare a node against its fleet siblings.
+.PHONY: demo-site
+demo-site:
+	@$(GO) run ./cmd/cairn init --fixture site/testdata/slurm-lmod-gpu -o -
+	@echo
+	@$(GO) run ./cmd/cairn diff node-0046 --profiles site/testdata/profiles

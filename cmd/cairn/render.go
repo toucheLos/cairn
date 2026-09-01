@@ -9,6 +9,7 @@ import (
 	"github.com/touchelos/cairn/collectors"
 	"github.com/touchelos/cairn/join"
 	"github.com/touchelos/cairn/schema"
+	sitepkg "github.com/touchelos/cairn/site"
 )
 
 // estimateTokens approximates the token cost of a string.
@@ -122,6 +123,11 @@ type renderOpts struct {
 	Budget int
 	// Verbose includes collector warnings — the lines no signature matched.
 	Verbose bool
+	// Site is the profile rendered as the context header. Zero value means no
+	// profile was found, which is reported rather than passed over.
+	Site sitepkg.Profile
+	// SitePath is where the profile came from, for the "no profile" message.
+	SitePath string
 }
 
 // renderText produces the report meant to be pasted into a model.
@@ -152,6 +158,8 @@ func renderText(res join.Result, results []collectors.Result, cluster schema.Clu
 		fmt.Fprintf(&b, "nodes: %s\n", joinNodes(res.Nodes))
 	}
 
+	b.WriteString(renderSite(opts.Site, opts.SitePath))
+
 	if len(res.Events) == 0 {
 		b.WriteString("\nNo events. Either nothing recorded this job, or the collectors could\n" +
 			"not see the producers that would have. Check `cairn doctor`.\n")
@@ -164,6 +172,10 @@ func renderText(res join.Result, results []collectors.Result, cluster schema.Clu
 	// what it could: a truncated evidence list still reads as complete if the
 	// gaps are missing.
 	caps := renderCapabilities(results)
+	// The site header is inside b already and so is counted here. It is
+	// reserved for the same reason the capability section is: it is the part
+	// that prevents a wrong answer rather than adding another right one, and
+	// dropping it to fit two more events is a bad trade at any budget.
 	reserved := estimateTokens(b.String()) + estimateTokens(caps) + 64 // 64 for the trailer
 
 	rows := collapse(res.Events)
@@ -371,4 +383,99 @@ func max(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// renderSite is the context header: what kind of cluster this is.
+//
+// CLAUDE.md §6 calls this the thing "that stops a model suggesting PBS syntax to
+// a Slurm site", and that is the standard it is written to. Only facts that
+// change the shape of a correct answer go in — scheduler and version, module
+// system, distro and kernel, fabric, GPU stack. Partition lists, mount tables
+// and probe records stay in site.yaml: they are what an admin corrects, not what
+// a reader needs in front of the evidence.
+//
+// The absence of a profile is stated, never left silent. A report with no header
+// invites the reader to assume a stack, and assuming is the failure this whole
+// section exists to prevent.
+func renderSite(p sitepkg.Profile, path string) string {
+	if p.Cluster == "" {
+		return "\nSITE       no profile — run `cairn init` to write one.\n" +
+			"           Without it nothing below says which scheduler, module system or\n" +
+			"           driver generation this is, and a reader will guess.\n"
+	}
+
+	var lines [][2]string
+	add := func(label, v string) {
+		if strings.TrimSpace(v) != "" {
+			lines = append(lines, [2]string{label, v})
+		}
+	}
+
+	sched := p.Scheduler.Kind
+	switch {
+	case sched == "" || sched == "none":
+		sched = "none detected — cairn found no scheduler client on the host it probed"
+	case p.Scheduler.Version != "":
+		sched += " " + p.Scheduler.Version
+	}
+	add("scheduler", sched)
+
+	mods := p.Modules.Kind
+	if mods == "" || mods == "none" {
+		mods = "none active"
+	}
+	add("modules", mods)
+
+	if os := strings.TrimSpace(p.OS.ID + " " + p.OS.VersionID); os != "" {
+		if p.OS.KernelRelease != "" {
+			os += ", kernel " + p.OS.KernelRelease
+		}
+		if p.OS.GlibcVersion != "" {
+			os += ", glibc " + p.OS.GlibcVersion
+		}
+		add("os", os)
+	}
+
+	if p.Fabric.Kind != "" && p.Fabric.Kind != "none" {
+		f := p.Fabric.Kind
+		if len(p.Fabric.Rates) > 0 {
+			f += " " + strings.Join(p.Fabric.Rates, " ")
+		}
+		add("fabric", f)
+	}
+
+	if p.GPU.Vendor != "" && p.GPU.Vendor != "none" {
+		g := p.GPU.Vendor
+		if p.GPU.DriverVersion != "" {
+			g += " driver " + p.GPU.DriverVersion
+		}
+		if p.GPU.CUDAVersion != "" {
+			g += ", CUDA " + p.GPU.CUDAVersion
+		}
+		if len(p.GPU.Models) > 0 {
+			g += " (" + strings.Join(p.GPU.Models, ", ") + ")"
+		}
+		add("gpu", g)
+	}
+
+	var b strings.Builder
+	b.WriteString("\nSITE")
+	if path != "" {
+		fmt.Fprintf(&b, "       from %s", path)
+	}
+	b.WriteString("\n")
+	for _, l := range lines {
+		fmt.Fprintf(&b, "  %-10s %s\n", l[0], l[1])
+	}
+
+	// A profile whose scheduler probe failed is worse than none, because it
+	// looks authoritative. Say so where the reader is already looking.
+	for _, pr := range p.Missing() {
+		if pr.Name == "scheduler" {
+			b.WriteString("  note       this profile's scheduler was never successfully probed;\n" +
+				"             correct it by hand before trusting the line above\n")
+			break
+		}
+	}
+	return b.String()
 }

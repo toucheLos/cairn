@@ -1,0 +1,1 @@
+placeholder: qstat present, so a PBS-family scheduler is detected

@@ -4,6 +4,35 @@ Every entry records a version, what changed, and what a consumer must do about
 it. CLAUDE.md §10: schema changes require a version bump and a migration note,
 never a silent edit.
 
+## Version 2 — unreleased (Phase 3)
+
+**Added the `site` producer.** `cairn diff` compares a node's captured profile
+against its fleet siblings and emits `config.drift` for each key that diverges.
+Those events needed a `source`, and none of the six existing producers is one:
+nothing on a node emits a drift event. cairn derives it by comparing profiles it
+captured itself, and kernel release, glibc version, munge-key mtime and module
+roots have no producer to attribute them to at all.
+
+`config.drift` and its attrs — `key`, `observed`, `expected`, `peer_count`,
+`peer_majority` — were registered in v1 with sibling-majority semantics already
+in mind. The class was there; only the producer was missing.
+
+**Why this is a version bump and not an additive change.** `DecodeEvents`
+rejects an unknown source, and `Event.Validate` rejects one on the way in. So a
+v1 reader handed a bundle containing site events fails outright rather than
+skipping them. That is the intended behavior — schema/DESIGN.md §8 argues a
+version mismatch must be loud — but it makes adding a producer a breaking change
+in practice, whatever it looks like on paper.
+
+**Migration.** Nothing has shipped, so no stored bundle needs rewriting.
+A consumer pinned to v1 must either add `site` to its source enum or reject v2
+bundles; it must not silently drop the events, because a dropped drift event
+reads as a clean fleet.
+
+`site` is excluded from the collector registry and from `doctor`'s
+"not yet implemented" list, via `Source.CollectorBacked`. Listing it there would
+claim a gap that no amount of work could ever close.
+
 ## Version 1 — unreleased (Phase 0)
 
 Initial schema. Nothing has shipped, so nothing needs migrating.

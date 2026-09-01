@@ -34,8 +34,31 @@ type Env interface {
 	// ReadFile reads a file.
 	ReadFile(path string) ([]byte, error)
 
+	// Stat reports a file's modification time without reading it.
+	//
+	// Narrower than fs.FileInfo on purpose. The one thing that needs this is
+	// the munge key's mtime, which site/ compares across a fleet: key
+	// distribution failures show up as one node's key being older than its
+	// siblings'. /etc/munge/munge.key is mode 0400 munge:munge, so an
+	// unprivileged cairn can stat it and cannot read it — returning an
+	// fs.FileInfo would hand collectors a size and mode nothing needs, and
+	// returning the contents is exactly what invariant §2.2 says we must not
+	// require.
+	Stat(path string) (time.Time, error)
+
 	// LookPath reports whether a binary is present and executable.
 	LookPath(name string) (string, error)
+
+	// Getenv reads an environment variable, returning "" when unset.
+	//
+	// Discovery needs this and cannot fake it from the filesystem: Lmod
+	// announces itself through $LMOD_CMD and $MODULESHOME, Spack through
+	// $SPACK_ROOT, EasyBuild through $EASYBUILD_INSTALLPATH. Probing well-known
+	// paths instead would find an installation the site has not actually
+	// activated, and report a module system that no job of theirs can use.
+	//
+	// It is a read, so it does not widen what a collector may do to a host.
+	Getenv(name string) string
 
 	// Location is the time zone of the host the output came from.
 	//
@@ -81,6 +104,19 @@ func (e OSEnv) Run(ctx context.Context, name string, args ...string) ([]byte, er
 }
 
 func (e OSEnv) ReadFile(path string) ([]byte, error) { return os.ReadFile(path) }
+
+func (e OSEnv) Stat(path string) (time.Time, error) {
+	fi, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return time.Time{}, fmt.Errorf("%s: %w", path, ErrNotFound)
+		}
+		return time.Time{}, err
+	}
+	return fi.ModTime().UTC(), nil
+}
+
+func (e OSEnv) Getenv(name string) string { return os.Getenv(name) }
 
 func (e OSEnv) LookPath(name string) (string, error) {
 	p, err := exec.LookPath(name)
@@ -191,6 +227,65 @@ func (e *FixtureEnv) ReadFile(path string) ([]byte, error) {
 		e.Seen[filepath.Base(path)] = true
 	}
 	return data, nil
+}
+
+// Stat resolves a modification time from input/mtimes.txt, whose lines are
+// `<basename> <RFC3339>`.
+//
+// The mtime is stated by the fixture rather than taken from the replayed file
+// on disk, and that is the whole point: a checkout's mtimes are whenever git
+// happened to write them, so reading them would make the same fixture produce a
+// different profile on every machine and break invariant §2.7 in a way that
+// only shows up when two people compare results.
+func (e *FixtureEnv) Stat(path string) (time.Time, error) {
+	base := filepath.Base(path)
+	data, err := os.ReadFile(filepath.Join(e.Dir, "input", "mtimes.txt"))
+	if err != nil {
+		return time.Time{}, fmt.Errorf("%s: %w", path, ErrNotFound)
+	}
+	if e.Seen != nil {
+		e.Seen["mtimes.txt"] = true
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		name, stamp, ok := strings.Cut(line, " ")
+		if !ok || name != base {
+			continue
+		}
+		t, err := time.Parse(time.RFC3339, strings.TrimSpace(stamp))
+		if err != nil {
+			return time.Time{}, fmt.Errorf("mtimes.txt: %s: %w", base, err)
+		}
+		return t.UTC(), nil
+	}
+	return time.Time{}, fmt.Errorf("%s: %w", path, ErrNotFound)
+}
+
+// Getenv resolves a variable from input/environ.txt, whose lines are KEY=VALUE.
+//
+// A fixture with no environ.txt reports every variable unset, which is the
+// correct replay of a site that activates nothing.
+func (e *FixtureEnv) Getenv(name string) string {
+	data, err := os.ReadFile(filepath.Join(e.Dir, "input", "environ.txt"))
+	if err != nil {
+		return ""
+	}
+	if e.Seen != nil {
+		e.Seen["environ.txt"] = true
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if k, v, ok := strings.Cut(line, "="); ok && k == name {
+			return v
+		}
+	}
+	return ""
 }
 
 func (e *FixtureEnv) LookPath(name string) (string, error) {

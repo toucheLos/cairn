@@ -1,0 +1,5 @@
+proc /proc proc rw,nosuid,nodev,noexec,relatime 0 0
+/dev/mapper/rl-root / xfs rw,relatime 0 0
+192.0.2.10@o2ib:/lustre /scratch lustre rw,flock,lazystatfs 0 0
+198.51.100.5:/export/home /home nfs4 rw,relatime,vers=4.2 0 0
+tmpfs /run tmpfs rw,nosuid,nodev 0 0

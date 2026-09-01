@@ -1,0 +1,5 @@
+# <basename> <timestamp>. Stated by the fixture, never read from the checkout:
+# a git clone's mtimes are whenever git happened to write them, so reading them
+# would make this fixture produce a different profile on every machine.
+munge.key 2026-01-15T08:00:00Z
+prometheus.yml 2025-11-02T12:00:00Z

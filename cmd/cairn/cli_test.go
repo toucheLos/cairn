@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/touchelos/cairn/schema"
 )
 
 // buildCairn compiles the binary once and returns its path. The CLI is what
@@ -113,7 +117,11 @@ func TestJSONOutputIsTheCanonicalBundle(t *testing.T) {
 	if got.code != 0 {
 		t.Fatalf("exit %d: %s", got.code, got.stderr)
 	}
-	if !strings.HasPrefix(got.stdout, `{"schema_version":1,`) {
+	// Derived from schema.Version rather than written out, so a deliberate
+	// version bump does not present as an unrelated CLI test failure. The bump
+	// itself is guarded by schema/testdata/bundle.golden, which is where a
+	// reviewer should be made to read the diff.
+	if !strings.HasPrefix(got.stdout, fmt.Sprintf(`{"schema_version":%d,`, schema.Version)) {
 		t.Errorf("json output does not start with the bundle header:\n%s", got.stdout[:min(200, len(got.stdout))])
 	}
 	// A wall-clock stamp would make two bundles of the same window differ.
@@ -194,7 +202,8 @@ func TestUsageAndErrors(t *testing.T) {
 	if got := run(t, bin, nil, "nonsense"); got.code != 2 {
 		t.Errorf("unknown command: exit %d", got.code)
 	}
-	if got := run(t, bin, nil, "version"); got.code != 0 || !strings.Contains(got.stdout, "schema version 1") {
+	wantVersion := fmt.Sprintf("schema version %d", schema.Version)
+	if got := run(t, bin, nil, "version"); got.code != 0 || !strings.Contains(got.stdout, wantVersion) {
 		t.Errorf("version: exit %d, stdout %q", got.code, got.stdout)
 	}
 }
@@ -244,4 +253,190 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// ---------- Phase 3: init, profile, diff ----------
+
+// TestInitWritesAndRefusesToClobber covers the workflow CLAUDE.md §6 specifies:
+// admins correct a generated file. The correction surviving a re-run is the
+// whole feature, so the refusal is tested as carefully as the write.
+func TestInitWritesAndRefusesToClobber(t *testing.T) {
+	bin := buildCairn(t)
+	out := filepath.Join(t.TempDir(), "site.yaml")
+
+	got := run(t, bin, nil, "init", "--fixture", "../../site/testdata/slurm-lmod-gpu", "-o", out)
+	if got.code != 0 {
+		t.Fatalf("init: exit %d: %s", got.code, got.stderr)
+	}
+	first, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(first), "cluster: cluster-a") {
+		t.Errorf("the cluster name should come from slurm.conf:\n%s", first)
+	}
+
+	// Re-running with no change must be a no-op, not a diff.
+	if got := run(t, bin, nil, "init", "--fixture", "../../site/testdata/slurm-lmod-gpu", "-o", out); got.code != 0 {
+		t.Errorf("re-running init on an identical file: exit %d: %s", got.code, got.stderr)
+	}
+
+	// An admin's correction must not be silently overwritten.
+	edited := strings.Replace(string(first), "kind: slurm", "kind: pbs", 1)
+	if err := os.WriteFile(out, []byte(edited), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got = run(t, bin, nil, "init", "--fixture", "../../site/testdata/slurm-lmod-gpu", "-o", out)
+	if got.code == 0 {
+		t.Error("init overwrote a corrected file without --force")
+	}
+	if !strings.Contains(got.stderr, "scheduler.kind") {
+		t.Errorf("the refusal must show what would change, got: %s", got.stderr)
+	}
+	after, _ := os.ReadFile(out)
+	if string(after) != edited {
+		t.Error("the corrected file was modified despite the refusal")
+	}
+
+	// --force is the escape hatch, and it must actually work.
+	if got := run(t, bin, nil, "init", "--fixture", "../../site/testdata/slurm-lmod-gpu",
+		"-o", out, "--force"); got.code != 0 {
+		t.Errorf("--force: exit %d: %s", got.code, got.stderr)
+	}
+	forced, _ := os.ReadFile(out)
+	if !bytes.Equal(forced, first) {
+		t.Error("--force did not restore the probed profile")
+	}
+}
+
+// TestInitOnUnknownStack is invariant §2.6 at the CLI boundary: an unrecognized
+// scheduler must still produce a file, because the admin correcting it is
+// exactly the person who knows what cairn failed to recognize.
+func TestInitOnUnknownStack(t *testing.T) {
+	bin := buildCairn(t)
+	out := filepath.Join(t.TempDir(), "site.yaml")
+	got := run(t, bin, nil, "init", "--fixture", "../../site/testdata/unknown-scheduler", "-o", out)
+	if got.code != 0 {
+		t.Fatalf("an unknown stack must not fail: exit %d: %s", got.code, got.stderr)
+	}
+	data, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "kind: pbs") {
+		t.Errorf("expected pbs to be detected:\n%s", data)
+	}
+}
+
+// TestContextCarriesTheSiteHeader: §6 calls this the thing that stops a model
+// answering a Slurm question in PBS syntax, so its presence is load-bearing.
+func TestContextCarriesTheSiteHeader(t *testing.T) {
+	bin := buildCairn(t)
+	f := corpus()[5] // 006-munge-auth-failure, on cluster-a
+	got := run(t, bin, fixtureEnv(f.node), "context", "--job", f.job,
+		"--fixture", "../../fixtures/"+f.dir, "--tz", "UTC",
+		"--site", "../../site/testdata/slurm-lmod-gpu.golden.yaml")
+	if got.code != 0 {
+		t.Fatalf("exit %d: %s", got.code, got.stderr)
+	}
+	for _, want := range []string{"SITE", "scheduler  slurm 23.02.7", "modules    lmod"} {
+		if !strings.Contains(got.stdout, want) {
+			t.Errorf("context output lacks %q:\n%s", want, got.stdout)
+		}
+	}
+	// The cluster name comes from the profile rather than defaulting to "local".
+	if !strings.Contains(got.stdout, "on cluster-a") {
+		t.Errorf("cluster name did not come from the site profile:\n%s", got.stdout)
+	}
+}
+
+// TestContextWithoutSiteSaysSo: silence would invite a reader to assume a stack,
+// which is the failure the profile exists to prevent.
+func TestContextWithoutSiteSaysSo(t *testing.T) {
+	bin := buildCairn(t)
+	f := corpus()[5]
+	got := run(t, bin, append(fixtureEnv(f.node), "CAIRN_SITE="), "context", "--job", f.job,
+		"--fixture", "../../fixtures/"+f.dir, "--tz", "UTC")
+	if got.code != 0 {
+		t.Fatalf("exit %d: %s", got.code, got.stderr)
+	}
+	if !strings.Contains(got.stdout, "no profile") || !strings.Contains(got.stdout, "cairn init") {
+		t.Errorf("a missing profile must be stated and name the fix:\n%s", got.stdout)
+	}
+}
+
+// TestDiffFlagsAfterTheNode guards a footgun that already bit once: Go's flag
+// package stops parsing at the first non-flag argument, so `diff <node> --flag`
+// silently ignored every flag after the node.
+func TestDiffFlagsAfterTheNode(t *testing.T) {
+	bin := buildCairn(t)
+	got := run(t, bin, nil, "diff", "node-0046", "--profiles", "../../site/testdata/profiles")
+	if got.code != 0 {
+		t.Fatalf("exit %d: %s", got.code, got.stderr)
+	}
+	if !strings.Contains(got.stdout, "nvidia.driver_version") {
+		t.Errorf("--profiles after the node was ignored:\n%s%s", got.stdout, got.stderr)
+	}
+	// The same invocation with the flag first must produce identical output.
+	other := run(t, bin, nil, "diff", "--profiles", "../../site/testdata/profiles", "node-0046")
+	if other.stdout != got.stdout {
+		t.Errorf("flag order changed the output:\n%s\nvs\n%s", got.stdout, other.stdout)
+	}
+}
+
+// TestDiffRefusesBelowMinPeers: a confident-looking claim derived from one peer
+// is worse than no claim, and the refusal has to reach the operator.
+func TestDiffRefusesBelowMinPeers(t *testing.T) {
+	bin := buildCairn(t)
+	got := run(t, bin, nil, "diff", "node-0046", "--profiles", "../../site/testdata/profiles-few")
+	if got.code != 0 {
+		t.Fatalf("a refusal is a result, not an error: exit %d: %s", got.code, got.stderr)
+	}
+	if !strings.Contains(got.stdout, "Not compared") {
+		t.Errorf("expected a refusal:\n%s", got.stdout)
+	}
+	if strings.Contains(got.stdout, "DIVERGENCE") {
+		t.Errorf("a refused comparison must report no drift:\n%s", got.stdout)
+	}
+}
+
+// TestDiffJSONRedacts is the check that cannot be undone once a bundle is sent.
+func TestDiffJSONRedacts(t *testing.T) {
+	bin := buildCairn(t)
+	env := []string{"CAIRN_SALT=0123456789abcdef0123456789abcdef"}
+	got := run(t, bin, env, "diff", "node-0049",
+		"--profiles", "../../site/testdata/profiles", "--redact", "--format", "json")
+	if got.code != 0 {
+		t.Fatalf("exit %d: %s", got.code, got.stderr)
+	}
+	for _, forbidden := range []string{"node-0049", "cluster-a", "192.0.2.10"} {
+		if strings.Contains(got.stdout, forbidden) {
+			t.Errorf("%q survived redaction:\n%s", forbidden, got.stdout)
+		}
+	}
+	// The drift is still legible: pseudonymized, not deleted.
+	if !strings.Contains(got.stdout, "config.drift") || !strings.Contains(got.stdout, "lustre") {
+		t.Errorf("redaction destroyed the evidence:\n%s", got.stdout)
+	}
+}
+
+// TestProfileIsDeterministic: two captures of one fixture at a fixed time must
+// be byte-identical, or a fleet comparison is comparing noise (§2.7).
+func TestProfileIsDeterministic(t *testing.T) {
+	bin := buildCairn(t)
+	args := []string{"profile", "--fixture", "../../site/testdata/slurm-lmod-gpu",
+		"--node", "node-0046", "--cluster", "cluster-a", "--at", "2026-03-04T09:00:00Z"}
+	first := run(t, bin, nil, args...)
+	if first.code != 0 {
+		t.Fatalf("exit %d: %s", first.code, first.stderr)
+	}
+	for i := 0; i < 5; i++ {
+		if got := run(t, bin, nil, args...); got.stdout != first.stdout {
+			t.Fatalf("capture %d differs:\n%s\nvs\n%s", i, first.stdout, got.stdout)
+		}
+	}
+	// The munge key mtime is stat'ed, and its contents must never be read.
+	if !strings.Contains(first.stdout, "munge.key_mtime") {
+		t.Errorf("expected a munge key mtime drift key:\n%s", first.stdout)
+	}
 }

@@ -138,6 +138,29 @@ else
 	fail=$((fail + 1))
 fi
 
+# 9. site.yaml decoding rejects a key nobody registered.
+#
+#    This file is hand-edited by design (CLAUDE.md §6: admins correct a generated
+#    file), so a typo must fail loudly. Ignoring `partitons:` would leave the file
+#    saying one thing and the tool doing another — which is the exact failure the
+#    site profile exists to prevent, reintroduced one silent line at a time.
+stash site/testdata/slurm-lmod-gpu.golden.yaml
+sed -i 's/^  partitions:/  partitons:/' site/testdata/slurm-lmod-gpu.golden.yaml
+expect_fail "site.yaml rejects an unknown key" \
+	go test ./site -run TestGoldensDecode
+restore
+
+# 10. A site profile from a newer cairn is refused, not half-read.
+#
+#     Same argument as schema/DESIGN.md §8 makes for bundles: a version mismatch
+#     must be loud. A profile read with fields silently missing would produce a
+#     context header that is confidently wrong about the scheduler.
+stash site/testdata/cpu-only.golden.yaml
+sed -i 's/^version: 1/version: 99/' site/testdata/cpu-only.golden.yaml
+expect_fail "a future site profile version is refused" \
+	go test ./site -run TestGoldensDecode
+restore
+
 echo
 if [ "$fail" -ne 0 ]; then
 	echo "$fail guard(s) did not fire. Fix them before trusting any of this."

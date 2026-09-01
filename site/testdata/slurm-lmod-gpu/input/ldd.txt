@@ -1,0 +1,2 @@
+ldd (GNU libc) 2.34
+Copyright (C) 2023 Free Software Foundation, Inc.

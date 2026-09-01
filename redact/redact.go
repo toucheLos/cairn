@@ -17,9 +17,11 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/touchelos/cairn/schema"
+	"github.com/touchelos/cairn/site"
 )
 
 // Mode selects what the redactor does.
@@ -43,6 +45,7 @@ const (
 	kindUser    kind = "user"
 	kindAccount kind = "account"
 	kindCluster kind = "cluster"
+	kindAddr    kind = "addr"
 	kindOpaque  kind = "opaque"
 )
 
@@ -51,6 +54,7 @@ var prefixes = map[kind]string{
 	kindUser:    "user-",
 	kindAccount: "acct-",
 	kindCluster: "cluster-",
+	kindAddr:    "addr-",
 	kindOpaque:  "redacted-",
 }
 
@@ -174,6 +178,20 @@ func (r *Redactor) Mapping() []MappingEntry {
 }
 
 var homePath = regexp.MustCompile(`(/(?:home|users|u)/)([^/\s:,]+)`)
+
+// ipv4 matches a dotted-quad address.
+//
+// Addresses are pseudonymized structurally rather than by substitution, because
+// the substitution pass only rewrites identifiers it learned from a structured
+// field — and a storage server's address is never in one. It appears only inside
+// a free-form value such as a mount source, which is exactly where it is
+// guaranteed to appear: `192.0.2.10@o2ib:/lustre` and `server:/export` are what
+// every Lustre and NFS mount looks like.
+//
+// Found by running `cairn diff --redact` on a fleet whose /scratch mount had
+// drifted: the drift value carried the filesystem server's address straight
+// through the boundary. §10 says that is a bug and not a configuration choice.
+var ipv4 = regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}\b`)
 
 // Bundle redacts a whole bundle.
 //
@@ -305,6 +323,22 @@ func (r *Redactor) text(v string) (string, error) {
 		return "", perr
 	}
 
+	// Addresses next, for the same structural reason as home paths above.
+	v = ipv4.ReplaceAllStringFunc(v, func(m string) string {
+		if !plausibleIPv4(m) {
+			return m
+		}
+		p, err := r.pseudonym(kindAddr, m)
+		if err != nil {
+			perr = err
+			return m
+		}
+		return p
+	})
+	if perr != nil {
+		return "", perr
+	}
+
 	// Longest original first, so that a host named node-004 cannot partially
 	// rewrite an occurrence of node-0042.
 	type sub struct{ from, to string }
@@ -324,4 +358,127 @@ func (r *Redactor) text(v string) (string, error) {
 		v = strings.ReplaceAll(v, s.from, s.to)
 	}
 	return v, nil
+}
+
+// Profile redacts a site profile.
+//
+// It exists for the same reason Bundle does, and §10 gives the same answer: the
+// boundary redacts, not the caller. A site profile is not innocuous — the
+// cluster name is site-assigned, module and Spack roots routinely embed a
+// project or institution name, and a mount source carries a storage server's
+// hostname. `cairn context --redact` renders the profile as its header, so a
+// profile that skipped this would put back exactly what the bundle removed.
+//
+// Structural fields go through the same pseudonym space as events, so a host
+// named in a mount source and the same host named in an event get the same
+// pseudonym and stay comparable.
+func (r *Redactor) Profile(p site.Profile) (site.Profile, error) {
+	if r.mode == ModeNone {
+		return p, nil
+	}
+	if _, err := r.pseudonym(kindCluster, string(p.Cluster)); err != nil {
+		return site.Profile{}, err
+	}
+
+	out := p
+	out.Cluster = schema.ClusterName(r.mapping[kindCluster][string(p.Cluster)])
+
+	var err error
+	if out.Scheduler.ConfigPath, err = r.text(p.Scheduler.ConfigPath); err != nil {
+		return site.Profile{}, err
+	}
+	// Partition and QOS names are marked PII wherever they appear as event
+	// attrs (schema/attrs.go), so they are treated the same here.
+	if out.Scheduler.Partitions, err = r.texts(p.Scheduler.Partitions); err != nil {
+		return site.Profile{}, err
+	}
+	if out.Scheduler.QOS, err = r.texts(p.Scheduler.QOS); err != nil {
+		return site.Profile{}, err
+	}
+	if out.Modules.Roots, err = r.texts(p.Modules.Roots); err != nil {
+		return site.Profile{}, err
+	}
+
+	out.Builders = make([]site.Builder, len(p.Builders))
+	for i, b := range p.Builders {
+		if b.Root, err = r.text(b.Root); err != nil {
+			return site.Profile{}, err
+		}
+		out.Builders[i] = b
+	}
+
+	out.Mounts = make([]site.Mount, len(p.Mounts))
+	for i, m := range p.Mounts {
+		if m.Mountpoint, err = r.text(m.Mountpoint); err != nil {
+			return site.Profile{}, err
+		}
+		if m.Source, err = r.text(m.Source); err != nil {
+			return site.Profile{}, err
+		}
+		out.Mounts[i] = m
+	}
+
+	out.Metrics = make([]site.MetricsSystem, len(p.Metrics))
+	for i, m := range p.Metrics {
+		if m.Endpoint, err = r.text(m.Endpoint); err != nil {
+			return site.Profile{}, err
+		}
+		out.Metrics[i] = m
+	}
+
+	// Probe details are operator-facing prose that quotes paths and hostnames
+	// back — "no shared filesystems mounted here" is safe, "/gpfs/projname is
+	// not readable" is not. Substituting through the learned identifiers is the
+	// same best-effort treatment free-form attr values get.
+	out.Probes = make([]site.Probe, len(p.Probes))
+	for i, pr := range p.Probes {
+		if pr.Detail, err = r.text(pr.Detail); err != nil {
+			return site.Profile{}, err
+		}
+		out.Probes[i] = pr
+	}
+
+	// Deliberately not redacted: scheduler kind and version, module system kind,
+	// distro, kernel, glibc, driver and CUDA versions, GPU models, fabric rates.
+	// None identifies a site, and all of them are the reason the header exists —
+	// pseudonymizing "slurm 23.02.7" would leave a bundle nobody can reason about.
+	return out, nil
+}
+
+// plausibleIPv4 rejects dotted-quads whose octets are out of range.
+//
+// A version string like 550.54.14.2 matches the same shape as an address, and
+// pseudonymizing a driver version would destroy the single most useful value in
+// a GPU drift report. Checking the octets costs nothing and keeps the rewrite
+// confined to things that really are addresses.
+func plausibleIPv4(s string) bool {
+	parts := strings.Split(s, ".")
+	if len(parts) != 4 {
+		return false
+	}
+	for _, p := range parts {
+		if len(p) > 3 {
+			return false
+		}
+		n, err := strconv.Atoi(p)
+		if err != nil || n > 255 {
+			return false
+		}
+	}
+	return true
+}
+
+func (r *Redactor) texts(in []string) ([]string, error) {
+	if in == nil {
+		return nil, nil
+	}
+	out := make([]string, len(in))
+	for i, s := range in {
+		red, err := r.text(s)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = red
+	}
+	return out, nil
 }

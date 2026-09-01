@@ -9,7 +9,10 @@
 
 set -e
 
-files=$(git diff --cached --name-only --diff-filter=ACM -- 'fixtures/*' | grep -v '\.go$' | grep -v '\.redaction-ok$' || true)
+# Both corpora: site/testdata holds captured producer output for the discovery
+# probes, and can leak a hostname or a storage address exactly as fixtures/ can.
+files=$(git diff --cached --name-only --diff-filter=ACM -- 'fixtures/*' 'site/testdata/*' \
+	| grep -v '\.go$' | grep -v '\.redaction-ok$' || true)
 [ -z "$files" ] && exit 0
 
 if ! command -v go >/dev/null 2>&1; then

@@ -43,7 +43,7 @@ jobs:
       # failure is irreversible once a commit is pushed, so it runs on its own
       # and reports on its own.
       - name: Scan the corpus for unredacted material
-        run: go run ./redact/scan/cmd/scan-fixtures fixtures
+        run: go run ./redact/scan/cmd/scan-fixtures fixtures site/testdata
 
       # Golden files must be committed in the state the code generates. A
       # regenerated-but-uncommitted golden file means the enum or the encoding

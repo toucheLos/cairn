@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/touchelos/cairn/collectors"
@@ -11,6 +12,7 @@ import (
 	"github.com/touchelos/cairn/collectors/journal"
 	"github.com/touchelos/cairn/collectors/slurm"
 	"github.com/touchelos/cairn/schema"
+	"github.com/touchelos/cairn/site"
 )
 
 // registry is the set of collectors this build knows how to run.
@@ -27,6 +29,7 @@ type commonFlags struct {
 	cluster string
 	fixture string
 	tz      string
+	site    string
 }
 
 func (c *commonFlags) register(fs *flag.FlagSet) {
@@ -37,13 +40,82 @@ func (c *commonFlags) register(fs *flag.FlagSet) {
 	fs.StringVar(&c.tz, "tz", "",
 		"IANA zone of the host that produced the output, e.g. America/New_York\n"+
 			"(default: this host's local zone; several producers print local time with no offset)")
+	fs.StringVar(&c.site, "site", "",
+		"site profile, or a directory of them (default $CAIRN_SITE, else ./sites,\n"+
+			"./site.yaml, then the user config dir). Written by `cairn init`.")
 }
 
-// clusterName resolves the cluster stamped on events.
+// sites loads the configured site profiles.
 //
-// Phase 3 replaces this with site.yaml, which discovers the real name. Until
-// then it is explicit or "local" — never guessed from the hostname, because a
-// wrong cluster name silently makes two sites' bundles look like one site's.
+// Finding none is not an error and must not be treated as one: cairn works with
+// no profile at all, it simply cannot tell a reader which scheduler this is. The
+// returned path is empty in that case, and the commands say so rather than
+// printing a header built on a guess.
+func (c *commonFlags) sites() (site.Set, string, error) {
+	explicit := c.site
+	if explicit == "" {
+		explicit = os.Getenv("CAIRN_SITE")
+	}
+	if explicit != "" {
+		// Named explicitly, so a missing file is a real error — the operator
+		// asked for that profile and did not get it.
+		set, err := site.Load(explicit)
+		if err != nil {
+			return site.Set{}, explicit, err
+		}
+		return set, explicit, nil
+	}
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		dir = ""
+	}
+	return site.Discovered(dir)
+}
+
+// profileFor picks the profile a command should use.
+//
+// With one profile it is used without being named — most sites run one cluster
+// and should never have to say which. With several, --cluster selects; an
+// ambiguous set is an error rather than a guess, because silently picking one
+// would stamp the wrong cluster name on a bundle.
+func (c *commonFlags) profileFor(set site.Set) (site.Profile, error) {
+	if len(set.Profiles) == 0 {
+		return site.Profile{}, nil
+	}
+	name := c.cluster
+	if name == "" {
+		name = os.Getenv("CAIRN_CLUSTER")
+	}
+	if name != "" {
+		p, ok := set.Find(schema.ClusterName(name))
+		if !ok {
+			return site.Profile{}, fmt.Errorf(
+				"no profile for cluster %q; this set has %s", name, clusterList(set))
+		}
+		return p, nil
+	}
+	if p, ok := set.Only(); ok {
+		return p, nil
+	}
+	return site.Profile{}, fmt.Errorf(
+		"this set defines %d clusters (%s); name one with --cluster",
+		len(set.Profiles), clusterList(set))
+}
+
+func clusterList(set site.Set) string {
+	names := set.Names()
+	parts := make([]string, len(names))
+	for i, n := range names {
+		parts[i] = string(n)
+	}
+	return strings.Join(parts, ", ")
+}
+
+// clusterName resolves the cluster stamped on events, without a site profile.
+//
+// Never guessed from the hostname: a wrong cluster name silently makes two
+// sites' bundles look like one site's, and nothing downstream can detect it.
+// "local" is deliberately a non-name — it reads as unconfigured, which it is.
 func (c *commonFlags) clusterName() schema.ClusterName {
 	if c.cluster != "" {
 		return schema.ClusterName(c.cluster)
@@ -52,6 +124,21 @@ func (c *commonFlags) clusterName() schema.ClusterName {
 		return schema.ClusterName(v)
 	}
 	return "local"
+}
+
+// clusterNameWith resolves the cluster, preferring a site profile.
+//
+// This is the Phase 3 half of the TODO the comment above used to carry. An
+// explicit --cluster still wins: an operator correcting cairn is more reliable
+// than a probe, and site.yaml is itself a file they are expected to correct.
+func (c *commonFlags) clusterNameWith(p site.Profile) schema.ClusterName {
+	if c.cluster != "" {
+		return schema.ClusterName(c.cluster)
+	}
+	if p.Cluster != "" {
+		return p.Cluster
+	}
+	return c.clusterName()
 }
 
 func (c *commonFlags) location() (*time.Location, error) {

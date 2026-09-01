@@ -21,7 +21,11 @@ import (
 // Version is the schema version. It appears in the bundle header, not on each
 // event. Bump it for any change to the event shape or any non-additive change to
 // the class enum, and record the migration in CHANGELOG.md (CLAUDE.md §10).
-const Version = 1
+//
+// v2 added SourceSite. See CHANGELOG.md — adding a producer is not additive in
+// practice, because DecodeEvents rejects an unknown source, so a v1 reader
+// handed a bundle containing site events fails rather than degrading.
+const Version = 2
 
 // Field types that carry identifying information.
 //
@@ -54,12 +58,35 @@ const (
 	SourceFabric  Source = "fabric"
 	SourceStorage Source = "storage"
 	SourceBMC     Source = "bmc"
+
+	// SourceSite is cairn's own comparison of node profiles against their fleet
+	// siblings — the events `cairn diff` derives.
+	//
+	// It is the one source that is not a producer. Nothing on a node emits a
+	// site event: cairn captures a profile per node, compares them, and the
+	// divergence is the observation. Kernel, glibc, munge-key and module drift
+	// have no producer to attribute them to, which is what forced this member
+	// rather than reusing gpu or storage for facts they did not report.
+	//
+	// It is deliberately absent from the collector registry, and `doctor` skips
+	// it when listing producers with no collector: there is nothing to
+	// implement, so reporting it as unimplemented would be a standing false
+	// negative.
+	SourceSite Source = "site"
 )
 
 var allSources = []Source{
 	SourceSlurm, SourceJournal, SourceGPU,
 	SourceFabric, SourceStorage, SourceBMC,
+	SourceSite,
 }
+
+// CollectorBacked reports whether a collector could ever emit this source.
+//
+// False only for SourceSite, which cairn derives rather than reads. `doctor`
+// uses this so that a producer with no collector is reported as a real gap
+// while a derived source is not.
+func (s Source) CollectorBacked() bool { return s != SourceSite }
 
 var sourceSet = func() map[Source]struct{} {
 	m := make(map[Source]struct{}, len(allSources))

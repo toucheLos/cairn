@@ -1,0 +1,4 @@
+NAME="Rocky Linux"
+ID="rocky"
+VERSION_ID="9.3"
+PRETTY_NAME="Rocky Linux 9.3 (Blue Onyx)"

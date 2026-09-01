@@ -1,0 +1,5 @@
+LMOD_CMD=/apps/lmod/lmod/libexec/lmod
+MODULESHOME=/apps/lmod/lmod
+MODULEPATH=/apps/modulefiles/Core:/apps/modulefiles/Compiler
+SPACK_ROOT=/apps/spack
+EASYBUILD_INSTALLPATH=/apps/easybuild
