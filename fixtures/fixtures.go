@@ -19,7 +19,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/touchelos/cairn/corpuspath"
 	"github.com/touchelos/cairn/schema"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -349,4 +351,120 @@ func (f *Fixture) Validate() error {
 	}
 
 	return nil
+}
+
+// ---------- the private corpus ----------
+
+// PrivateCorpusEnv names the environment variable pointing at the private
+// corpus. See package corpuspath for why the definition lives there.
+const PrivateCorpusEnv = corpuspath.Env
+
+// DefaultPrivateCorpus is the in-tree directory the private corpus lives in.
+const DefaultPrivateCorpus = corpuspath.Default
+
+// PrivateCorpus locates the private corpus, returning "" when there is none.
+//
+// Observed incidents cannot be committed to this repository — not the raw
+// producer output, not the hand-redacted output, and not the event streams
+// derived from them (CLAUDE.md §3). They live here instead, and what is
+// published is the taxonomy built from them plus accuracy measured over them:
+// §9's "publish the methodology, not the data", as an arrangement of files
+// rather than an intention.
+func PrivateCorpus() (string, error) { return corpuspath.Find() }
+
+// InProgress reports whether a directory holds a capture nobody has finished.
+//
+// A capture starts life with `synthetic: false` and empty redaction fields —
+// `cairn capture` writes it that way deliberately, so that Validate refuses it
+// until a person has done the redaction pass and said so.
+//
+// That refusal is right, but it must not present as a broken test suite.
+// Building the corpus means twenty incidents captured over weeks, most of them
+// half-finished at any moment, and a test run that fails on "no such file:
+// expected/events.json" every time is one an operator stops running — taking
+// the redaction scanner and every other guard down with it.
+//
+// So an unfinished capture is skipped and named, never loaded. It cannot reach
+// Real() and cannot count toward an accuracy number, because it never becomes a
+// Fixture at all. Setting redacted_by is the act that opts it back in to full
+// validation.
+func InProgress(dir string) bool {
+	data, err := os.ReadFile(filepath.Join(dir, metaFile))
+	if err != nil {
+		return false
+	}
+	var m struct {
+		Synthetic  bool   `yaml:"synthetic"`
+		RedactedBy string `yaml:"redacted_by"`
+	}
+	if yaml.Unmarshal(data, &m) != nil {
+		return false
+	}
+	return !m.Synthetic && strings.TrimSpace(m.RedactedBy) == ""
+}
+
+// LoadCorpus loads the public corpus at publicRoot plus the private one when
+// present. The second return names private captures that are not finished.
+//
+// Fixtures in the public root must be synthetic, and that is enforced here
+// rather than only in a test. This is the function every caller goes through, so
+// a real incident that somehow reached fixtures/ fails to load at all instead of
+// failing one assertion in one package.
+func LoadCorpus(publicRoot string) ([]*Fixture, []string, error) {
+	fs, err := LoadAll(publicRoot)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, f := range fs {
+		if !f.Meta.Synthetic {
+			return nil, nil, fmt.Errorf(
+				"%s: an observed fixture is in the public corpus at %s. Observed "+
+					"incidents belong in the private corpus (CLAUDE.md §3) and must never "+
+					"be committed; move it to %s/", f.Meta.ID, publicRoot, DefaultPrivateCorpus)
+		}
+	}
+
+	priv, err := PrivateCorpus()
+	if err != nil {
+		return nil, nil, err
+	}
+	if priv == "" {
+		return fs, nil, nil
+	}
+
+	entries, err := os.ReadDir(priv)
+	if err != nil {
+		return nil, nil, err
+	}
+	var dirs []string
+	for _, e := range entries {
+		if e.IsDir() {
+			dirs = append(dirs, e.Name())
+		}
+	}
+	sort.Strings(dirs)
+
+	seen := map[string]bool{}
+	for _, f := range fs {
+		seen[f.Meta.ID] = true
+	}
+
+	var pending []string
+	for _, d := range dirs {
+		full := filepath.Join(priv, d)
+		if InProgress(full) {
+			pending = append(pending, full)
+			continue
+		}
+		f, err := Load(full)
+		if err != nil {
+			return nil, nil, err
+		}
+		if seen[f.Meta.ID] {
+			return nil, nil, fmt.Errorf("fixture id %q appears in both the public and private corpus", f.Meta.ID)
+		}
+		seen[f.Meta.ID] = true
+		fs = append(fs, f)
+	}
+	return fs, pending, nil
 }

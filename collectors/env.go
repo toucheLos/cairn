@@ -176,7 +176,10 @@ func NewFixtureEnv(dir string) *FixtureEnv {
 // candidates returns the input filenames a command could resolve to, most
 // specific first: `scontrol show node` prefers scontrol-show-node.txt over
 // scontrol.txt.
-func candidates(name string, args []string) []string {
+// commandWords splits a command into the base name and the bare words that
+// participate in a fixture filename. Shared by candidates and by the capture
+// path, so the two cannot disagree about what a command is called.
+func commandWords(name string, args []string) (string, []string) {
 	base := filepath.Base(name)
 	var words []string
 	for _, a := range args {
@@ -190,12 +193,26 @@ func candidates(name string, args []string) []string {
 		}
 		words = append(words, a)
 	}
+	return base, words
+}
+
+// stem builds the filename stem using the first n words: n=0 gives "scontrol",
+// n=2 gives "scontrol-show-job".
+func stem(base string, words []string, n int) string {
+	if n > len(words) {
+		n = len(words)
+	}
+	return strings.Join(append([]string{base}, words[:n]...), "-")
+}
+
+func candidates(name string, args []string) []string {
+	base, words := commandWords(name, args)
 
 	var out []string
 	for n := len(words); n >= 0; n-- {
-		stem := strings.Join(append([]string{base}, words[:n]...), "-")
+		s := stem(base, words, n)
 		for _, ext := range []string{".txt", ".log", ".json", ".xml"} {
-			out = append(out, stem+ext)
+			out = append(out, s+ext)
 		}
 	}
 	return out

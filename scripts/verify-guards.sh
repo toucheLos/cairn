@@ -161,6 +161,37 @@ expect_fail "a future site profile version is refused" \
 	go test ./site -run TestGoldensDecode
 restore
 
+# 11. An observed incident must never be committable.
+#
+#     CLAUDE.md §3, and the one guard here whose failure cannot be undone by a
+#     follow-up commit: once pushed, the material is on GitHub's servers and in
+#     the history. Three layers protect it and this exercises the outermost one,
+#     which is the layer that still works after `git add -f` and `--no-verify`.
+mkdir -p fixtures/999-guard-probe
+printf 'id: 999-guard-probe\nsynthetic: false\n' > fixtures/999-guard-probe/meta.yaml
+git add -f fixtures/999-guard-probe/meta.yaml >/dev/null 2>&1
+expect_fail "an observed fixture in the repo is caught" ./scripts/check-boundary.sh
+git rm -q --cached fixtures/999-guard-probe/meta.yaml >/dev/null 2>&1 || true
+rm -rf fixtures/999-guard-probe
+
+# 12. The public corpus refuses to load an observed fixture.
+#
+#     Belt to guard 11's braces, and at a different layer: this one fails the
+#     test run rather than the commit, so a real incident dropped into fixtures/
+#     is caught by anyone who types `go test` before they ever reach git.
+#     The redaction provenance is filled in as well as the flag flipped. Without
+#     that this only re-tests guard 5: Validate rejects an observed fixture with
+#     no redacted_by long before the boundary rule is reached, so the guard would
+#     pass while proving nothing about the rule it names.
+stash fixtures/003-gpu-driver-mismatch/meta.yaml
+sed -i -e 's/^synthetic: true$/synthetic: false/' \
+	-e 's/^redacted_by: ""$/redacted_by: "guard probe"/' \
+	-e 's/^redaction_method: ""$/redaction_method: "guard probe"/' \
+	fixtures/003-gpu-driver-mismatch/meta.yaml
+expect_fail "the public corpus refuses an observed fixture" \
+	go test ./fixtures -run TestPublicCorpusIsSynthetic
+restore
+
 echo
 if [ "$fail" -ne 0 ]; then
 	echo "$fail guard(s) did not fire. Fix them before trusting any of this."

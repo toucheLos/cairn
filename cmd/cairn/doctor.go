@@ -23,6 +23,8 @@ func runDoctor(args []string) error {
 		"exit nonzero if any capability is unavailable (for CI or a health check)")
 	all := fs.Bool("A", false,
 		"list every configured cluster's profile, not just this host's")
+	verbose := fs.Bool("v", false,
+		"show the log lines that matched no signature — these are the miss log")
 	fs.Usage = func() {
 		fmt.Fprint(fs.Output(), `usage: cairn doctor [flags]
 
@@ -115,6 +117,20 @@ flags:
 			"configuration, not observation — cairn reaches no scheduler but the local\n"+
 			"one, which is what \"no daemon, no server\" costs. Run doctor on each.\n",
 			len(set.Profiles)-1)
+	}
+
+	// The unmatched lines, on request.
+	//
+	// collectors.Report counts warnings and cannot show them, so until now
+	// `doctor` told an operator that N lines matched no signature and gave them
+	// no way to see which — on the one command CLAUDE.md §6 points at for the
+	// dogfooding those lines are the whole point of. `context` has had -v since
+	// Phase 2; this is the same renderer.
+	if *verbose {
+		fmt.Print(renderWarnings(results))
+	} else if n := countWarnings(results); n > 0 {
+		fmt.Printf("\n%d log line(s) matched no known signature. Re-run with -v to see\n"+
+			"them — they are the miss log that decides what gets built next.\n", n)
 	}
 
 	var unavailable int

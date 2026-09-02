@@ -49,10 +49,43 @@ Two of those are "later." Two are "never."
 
 ## 3. IP hygiene
 
-Personal hardware, personal account, outside employment hours. Never commit real
-hostnames, usernames, account codes, or raw accounting rows — fixtures are redacted
-by hand before they land. Do not describe the taxonomy publicly as "trained on"
-any specific institution's data.
+Personal hardware, personal account, outside employment hours.
+
+**Observed incidents never reach this repository.** Not the raw producer output,
+not the hand-redacted output, and not the event streams derived from them. They
+live in a private corpus — `corpus/`, gitignored — and what is published is the
+taxonomy built from them and the accuracy measured over them.
+
+| Artifact | Where it lives |
+|---|---|
+| Raw producer output | private corpus only |
+| Hand-redacted output | private corpus only |
+| Event streams (`expected/events.json`) | private corpus only |
+| Signature names (`mlx5.ib_event.link_down`) | may be published |
+| Taxonomy rules (signature → cause → remediation) | may be published |
+| Aggregate accuracy numbers | may be published |
+
+The line falls there because a signature describes *vendor* output — a Mellanox
+driver message, `sacct` printing `OUT_OF_MEMORY` — rather than any site's data.
+That is what makes §9's "publish the methodology, not the data" achievable
+rather than aspirational: the moat is buildable while the corpus stays home.
+
+Three guards enforce this, because each one alone can be stepped over:
+`.gitignore` (bypassed by `git add -f`), `scripts/pre-commit` (bypassed by
+`--no-verify`), and `scripts/check-boundary.sh`, which runs in CI — on GitHub —
+and so catches a bypass of the other two. `make install-hooks` installs the
+second.
+
+The public corpus in `fixtures/` is synthetic and always will be. `LoadCorpus`
+refuses to load an observed fixture from it.
+
+One residual risk no code can remove: the taxonomy's *shape* leaks stack
+composition — a burst of GPFS signatures implies a GPFS site. Do not describe
+the taxonomy publicly as "trained on" any specific institution's data.
+
+If an observed incident ever does land here, deleting it in a later commit does
+not fix it. The content is in the history and, once pushed, on GitHub's servers.
+Treat it as a disclosure.
 
 ---
 
@@ -108,10 +141,18 @@ optional and has not started.
       - [x] Redaction scanner + pre-commit hook (`redact/scan/`)
       - [x] Seven authored fixtures, one per mode above — all `synthetic: true`,
             excluded from every accuracy measurement. Templates, not evidence.
+      - [x] `cairn capture` — intake is one command. It runs the producers the
+            collectors read, saves exactly what they printed under the names
+            replay expects, pre-fills `meta.yaml` from the site profile, and
+            runs the redaction scanner. It never redacts (§3).
       - [ ] **The ~20 real incidents.** This is the remaining Phase 0 work and it
             cannot be delegated: it needs cluster access, and inventing incidents
-            would corrupt the eval set at its root. Intake procedure is in
-            `fixtures/README.md`.
+            would corrupt the eval set at its root.
+
+            They are captured into the **private corpus**, never here (§3). The
+            box is ticked when `corpus/` holds twenty redacted, classified
+            incidents — a state only the machine holding them can observe, which
+            is the point. What becomes public is the accuracy measured over them.
 
 Phase 0.3 is the test suite *and* the eval set. Build it before the code it tests.
 
@@ -323,6 +364,14 @@ dashboard. Assume these get cloned. Give them away; they're distribution.
 - **The eval harness.** A labeled set of real incidents with known-correct
   classifications is the only way to make defensible accuracy claims — and it's a
   credibility asset in its own right. Publish the methodology, not the data.
+
+  That sentence is now an arrangement of files rather than an intention. The
+  incidents live in a private corpus and cannot be committed; the harness, the
+  synthetic fixtures, the taxonomy and the accuracy numbers are public. See §3
+  for the boundary and the three guards that hold it. This also turns out to be
+  the only shape that works for a contributor who can run cairn on a cluster but
+  cannot export anything derived from its logs — which is most people who have
+  the access worth having.
 
 ---
 

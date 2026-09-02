@@ -17,6 +17,23 @@ import (
 
 const corpus = "../fixtures"
 
+// loadCorpus loads the public corpus plus the private one when present.
+//
+// Replay therefore runs against observed incidents on the machine that holds
+// them, and against the synthetic set everywhere else — including CI, which has
+// no private corpus and must never have one (CLAUDE.md §3).
+func loadCorpus(t *testing.T) []*fixtures.Fixture {
+	t.Helper()
+	fs, pending, err := fixtures.LoadCorpus(corpus)
+	if err != nil {
+		t.Fatalf("LoadCorpus: %v", err)
+	}
+	for _, p := range pending {
+		t.Logf("skipping %s: captured but not yet redacted, so it is not evidence", p)
+	}
+	return fs
+}
+
 // implemented is the set of producers that have a collector in Phase 1.
 // CLAUDE.md §6 scopes Phase 1 to slurm, journal, and gpu.
 func registry() collectors.Registry {
@@ -40,10 +57,7 @@ func implemented() map[schema.Source]bool {
 // Per-source keeps the target honest — each implemented collector must match its
 // slice exactly — while letting coverage grow toward the full stream.
 func TestReplay(t *testing.T) {
-	fs, err := fixtures.LoadAll(corpus)
-	if err != nil {
-		t.Fatalf("LoadAll: %v", err)
-	}
+	fs := loadCorpus(t)
 	impl := implemented()
 
 	for _, f := range fs {
@@ -93,10 +107,7 @@ func TestReplay(t *testing.T) {
 // rejects. Validate runs inside the encoder, so an invalid event would be
 // discovered only when someone tried to write a bundle.
 func TestEmittedEventsAreValid(t *testing.T) {
-	fs, err := fixtures.LoadAll(corpus)
-	if err != nil {
-		t.Fatalf("LoadAll: %v", err)
-	}
+	fs := loadCorpus(t)
 	for _, f := range fs {
 		env, req := setup(t, f)
 		for _, r := range registry().Collect(context.Background(), env, req) {
@@ -184,10 +195,7 @@ func (panicky) Collect(context.Context, collectors.Env, collectors.Request) coll
 // output every time (§2.7). Map iteration and regexp alternation are both places
 // this could quietly fail.
 func TestDeterministicAcrossRuns(t *testing.T) {
-	fs, err := fixtures.LoadAll(corpus)
-	if err != nil {
-		t.Fatalf("LoadAll: %v", err)
-	}
+	fs := loadCorpus(t)
 	for _, f := range fs {
 		env, req := setup(t, f)
 		first := mustEncode(t, collectors.MergeEvents(registry().Collect(context.Background(), env, req)))

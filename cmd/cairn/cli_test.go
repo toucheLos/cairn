@@ -440,3 +440,103 @@ func TestProfileIsDeterministic(t *testing.T) {
 		t.Errorf("expected a munge key mtime drift key:\n%s", first.stdout)
 	}
 }
+
+// ---------- capture and the corpus boundary ----------
+
+// TestCaptureRefusesThePublicCorpus is the boundary at the point an operator is
+// most likely to cross it by accident: typing the familiar path.
+func TestCaptureRefusesThePublicCorpus(t *testing.T) {
+	bin := buildCairn(t)
+	got := run(t, bin, nil, "capture", "--job", "12345", "-o", "fixtures/999-nope")
+	if got.code == 0 {
+		t.Fatal("capture wrote an observed incident into the public corpus")
+	}
+	if !strings.Contains(got.stderr, "never committed") {
+		t.Errorf("the refusal should say why, got: %s", got.stderr)
+	}
+}
+
+// TestCaptureWritesAnUnusableSkeleton: a capture must not be mistakable for
+// evidence. It lands with synthetic:false and empty redaction fields, so the
+// loader treats it as in progress and it can never reach an accuracy number.
+func TestCaptureWritesAnUnusableSkeleton(t *testing.T) {
+	bin := buildCairn(t)
+	dir := filepath.Join(t.TempDir(), "001-probe")
+
+	got := run(t, bin, nil, "capture", "--job", "12345", "-o", dir)
+	if got.code != 0 {
+		// On a host with no producer at all there is nothing to capture, and
+		// saying so is the correct outcome rather than a test failure.
+		if strings.Contains(got.stderr, "nothing was captured") {
+			t.Skip("this host has no readable producer; nothing to capture")
+		}
+		t.Fatalf("exit %d: %s", got.code, got.stderr)
+	}
+
+	meta, err := os.ReadFile(filepath.Join(dir, "meta.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(meta)
+	if !strings.Contains(body, "synthetic: false") {
+		t.Error("a capture must be marked observed, not synthetic")
+	}
+	for _, want := range []string{`redacted_by: ""`, `redaction_method: ""`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("capture pre-filled %s; redaction provenance must be left for a human", want)
+		}
+	}
+	if !strings.Contains(body, "expected_root_cause") {
+		t.Error("meta.yaml is missing the eval target")
+	}
+	// The scanner must have run and said something, because "clean" and
+	// "unexamined" have to look different to whoever reads this output.
+	if !strings.Contains(got.stdout, "REDACTION") {
+		t.Errorf("capture did not report on redaction:\n%s", got.stdout)
+	}
+}
+
+// TestCaptureWontOverwrite: an incident is expensive to obtain and impossible to
+// reproduce, so a second capture must never quietly replace the first.
+func TestCaptureWontOverwrite(t *testing.T) {
+	bin := buildCairn(t)
+	dir := filepath.Join(t.TempDir(), "001-probe")
+	if got := run(t, bin, nil, "capture", "--job", "12345", "-o", dir); got.code != 0 {
+		if strings.Contains(got.stderr, "nothing was captured") {
+			t.Skip("this host has no readable producer; nothing to capture")
+		}
+		t.Fatalf("exit %d: %s", got.code, got.stderr)
+	}
+	got := run(t, bin, nil, "capture", "--job", "12345", "-o", dir)
+	if got.code == 0 {
+		t.Error("capture overwrote an existing incident")
+	}
+}
+
+// TestDoctorShowsWarnings closes the gap logged during Phase 3: doctor counted
+// unmatched lines and gave no way to see them, on the very command §6 points at
+// for the dogfooding those lines are the point of.
+func TestDoctorShowsWarnings(t *testing.T) {
+	bin := buildCairn(t)
+	f := corpus()[0]
+	args := []string{"doctor", "--fixture", "../../fixtures/" + f.dir, "--tz", "UTC"}
+
+	quiet := run(t, bin, fixtureEnv(f.node), args...)
+	if quiet.code != 0 {
+		t.Fatalf("exit %d: %s", quiet.code, quiet.stderr)
+	}
+	verbose := run(t, bin, fixtureEnv(f.node), append(args, "-v")...)
+	if verbose.code != 0 {
+		t.Fatalf("exit %d: %s", verbose.code, verbose.stderr)
+	}
+
+	// Whatever this fixture yields, -v must never show less than the default.
+	if len(verbose.stdout) < len(quiet.stdout) {
+		t.Errorf("-v produced less output than the default")
+	}
+	if strings.Contains(quiet.stdout, "warning") || strings.Contains(quiet.stdout, "matched no known signature") {
+		if !strings.Contains(verbose.stdout, "UNMATCHED") {
+			t.Errorf("doctor counts warnings but -v does not show them:\n%s", verbose.stdout)
+		}
+	}
+}

@@ -39,6 +39,17 @@ func main() {
 			fmt.Fprintf(os.Stderr, "scan-fixtures: reading stdin: %v\n", err)
 			os.Exit(2)
 		}
+		// The same test the directory walk applies below.
+		//
+		// Without it the two entry points disagree about what fixture data is,
+		// and they are meant to be the same check seen from two directions:
+		// `make scan-fixtures` walks the tree, the pre-commit hook pipes one
+		// staged blob. The disagreement is not theoretical — it fired on
+		// fixtures/README.md, whose documented example of a .redaction-ok entry
+		// contains the very string that entry exists to permit.
+		if !scan.IsFixtureData(*name) {
+			return
+		}
 		sup, err := loadSuppressions(filepath.Dir(*name))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "scan-fixtures: %v\n", err)

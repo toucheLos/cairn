@@ -45,6 +45,13 @@ jobs:
       - name: Scan the corpus for unredacted material
         run: go run ./redact/scan/cmd/scan-fixtures fixtures site/testdata
 
+      # The private-corpus boundary. Deliberately separate from `make check` and
+      # reported on its own: this is the check that runs on GitHub, and the
+      # failure it catches — an observed incident reaching a public repository —
+      # is not undoable by a follow-up commit.
+      - name: No observed incident is committed
+        run: ./scripts/check-boundary.sh
+
       # Golden files must be committed in the state the code generates. A
       # regenerated-but-uncommitted golden file means the enum or the encoding
       # changed without the diff being reviewed.

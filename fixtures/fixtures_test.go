@@ -11,16 +11,49 @@ import (
 
 const root = "."
 
+// loadAll loads the public corpus plus the private one when present.
+//
+// Every rule below therefore runs against observed incidents too, on the machine
+// that holds them, while CI — which has no private corpus and must never have
+// one — exercises exactly the synthetic set.
 func loadAll(t *testing.T) []*Fixture {
 	t.Helper()
-	fs, err := LoadAll(root)
+	fs, pending, err := LoadCorpus(root)
 	if err != nil {
-		t.Fatalf("LoadAll: %v", err)
+		t.Fatalf("LoadCorpus: %v", err)
 	}
 	if len(fs) == 0 {
 		t.Fatal("no fixtures found")
 	}
+	if priv, _ := PrivateCorpus(); priv != "" {
+		t.Logf("private corpus at %s is included in this run", priv)
+	}
+	for _, p := range pending {
+		t.Logf("skipping %s: captured but not yet redacted, so it is not evidence", p)
+	}
 	return fs
+}
+
+// TestPublicCorpusIsSynthetic is the boundary, asserted where a developer meets
+// it first.
+//
+// An observed incident in fixtures/ is committable material derived from a real
+// site's logs, which CLAUDE.md §3 forbids outright. LoadCorpus refuses to load
+// one; this fails the test run for anyone who types `go test` before they ever
+// reach git, which is several steps earlier than the commit hook.
+func TestPublicCorpusIsSynthetic(t *testing.T) {
+	fs, err := LoadAll(root)
+	if err != nil {
+		// Load calls Validate, which already refuses an observed fixture with no
+		// redaction provenance. Reaching here at all is the finding.
+		t.Fatalf("public corpus does not load: %v", err)
+	}
+	for _, f := range fs {
+		if !f.Meta.Synthetic {
+			t.Errorf("%s: observed fixture in the public corpus; it belongs in %s/",
+				f.Meta.ID, DefaultPrivateCorpus)
+		}
+	}
 }
 
 // TestLoadAll is the corpus-wide validator: every rule in Validate runs against

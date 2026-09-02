@@ -203,9 +203,29 @@ make install-hooks
 
 ## Contributing a fixture
 
-The corpus is the point. See `fixtures/README.md` for the intake procedure and the
-redaction checklist. Incidents are hand-redacted before they land; the scanner is a
-backstop, not a substitute.
+The corpus is the point, and it is deliberately split in two.
+
+`fixtures/` is the public corpus. Everything in it is **synthetic** and always
+will be: authored templates that prove the harness runs and the collectors
+parse. No accuracy claim can be made from it.
+
+Observed incidents go into a private corpus that is never committed — not the
+raw output, not the redacted output, not the event streams derived from them.
+What gets published is the taxonomy built from them and the accuracy measured
+over them: the methodology, not the data.
+
+That split is what lets someone with real cluster access contribute at all when
+they cannot export anything derived from their logs, which is the common case
+among people whose access is worth having.
+
+```sh
+cairn capture --job 918633 --slug ib-link-flap --title "what happened"
+```
+
+Capture runs the producers cairn reads and saves exactly what they printed. It
+does not redact — that is done by hand, and the scanner is a backstop rather
+than a substitute. See `fixtures/README.md` for the full procedure and
+`CLAUDE.md` §3 for the boundary.
 
 ## License
 

@@ -9,6 +9,44 @@
 
 set -e
 
+# 1. Nothing from the private corpus may ever be staged.
+#
+# .gitignore covers the ordinary case; this covers `git add -f`. The material
+# there is a real site's log output, and a push is not reversible — so this
+# refuses the whole commit rather than quietly skipping the file.
+staged_corpus=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^corpus/' || true)
+if [ -n "$staged_corpus" ]; then
+	cat >&2 <<MSG
+
+pre-commit: refusing to commit files from the private corpus.
+
+$staged_corpus
+
+These are observed incidents. CLAUDE.md §3: raw output, redacted output, and the
+event streams derived from them never reach this repository. Only the taxonomy
+built from them and the accuracy measured over them are published.
+
+Run "git restore --staged corpus/" and commit the rest.
+MSG
+	exit 1
+fi
+
+# 2. No fixture may declare itself observed, wherever it sits. Checked by content
+#    rather than path: a real incident placed outside corpus/ is exactly the case
+#    a path rule misses.
+for meta in $(git diff --cached --name-only --diff-filter=ACM | grep -E 'meta\.yaml$' || true); do
+	if git show ":$meta" | grep -qE '^synthetic:[[:space:]]*false'; then
+		cat >&2 <<MSG
+
+pre-commit: $meta declares synthetic: false.
+
+An observed fixture cannot be committed (CLAUDE.md §3). Move it under corpus/,
+which is gitignored and refused by this hook.
+MSG
+		exit 1
+	fi
+done
+
 # Both corpora: site/testdata holds captured producer output for the discovery
 # probes, and can leak a hostname or a storage address exactly as fixtures/ can.
 files=$(git diff --cached --name-only --diff-filter=ACM -- 'fixtures/*' 'site/testdata/*' \

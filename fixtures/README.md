@@ -1,18 +1,25 @@
 # The fixture corpus
 
-This directory is the test suite and the eval set (CLAUDE.md §0.3), and it is
-the part of this project that compounds. The CLI is copyable in a weekend; a
-corpus of real, redacted, correctly classified incidents across heterogeneous
-sites is not (§9).
+The corpus is the test suite and the eval set (CLAUDE.md §0.3), and it is the
+part of this project that compounds. The CLI is copyable in a weekend; a corpus
+of real, redacted, correctly classified incidents across heterogeneous sites is
+not (§9).
+
+It comes in two halves. **This directory is the public half, and it is synthetic
+in its entirety.** The observed incidents — the half that is actually the moat —
+live in a private corpus that is never committed. See "Where observed incidents
+live" below.
 
 > **Status: seven authored fixtures, zero observed ones.**
 >
-> Every fixture currently here carries `synthetic: true`. They exist to exercise
+> Every fixture in this directory carries `synthetic: true`, and always will —
+> observed incidents are never committed (CLAUDE.md §3). They exist to exercise
 > the harness end to end and to serve as per-class templates. **They are not
 > evidence**, they are excluded from every accuracy measurement, and no accuracy
-> claim can be made from this directory in its present state.
+> claim can be made from this directory in any state.
 >
-> Phase 0.3 targets roughly twenty observed incidents. Adding them is the work.
+> Phase 0.3 targets roughly twenty observed incidents, captured into the private
+> corpus with `cairn capture`. Adding them is the work.
 
 ---
 
@@ -51,26 +58,58 @@ Capture what cairn would actually run, not what is quickest to type.
 default carries neither, and a fixture built from it silently makes every
 timestamp ambiguous.
 
+`cairn capture` handles all of this: it records what the collectors actually
+asked for and derives these names from the same resolver that finds them again,
+so the table above is a description of what it produces rather than a checklist
+to follow by hand. It also verifies the result replays before it declares
+success — the naming is subtle enough that asserting the outcome beats reasoning
+about it. Build a fixture by hand only for an authored, synthetic one.
+
+## Where observed incidents live
+
+**Not here.** This directory is the *public*, synthetic corpus and always will
+be. Observed incidents go in the private corpus — `corpus/`, gitignored — and
+are never committed: not the raw output, not the redacted output, not the event
+streams derived from them. See CLAUDE.md §3 for the boundary and the three
+guards that hold it, and run `make install-hooks` before you capture anything.
+
+What becomes public is the taxonomy built from those incidents and the accuracy
+measured over them. `LoadCorpus` loads both roots, so the harness runs against
+your real incidents on the machine that holds them and against the synthetic set
+everywhere else — including CI, which has no private corpus and must not.
+
 ## Adding an incident
 
 ```sh
-make new-fixture SLUG=ib-link-flap TITLE="IB link flap killed an MPI job"
+cairn capture --job 918633 --slug ib-link-flap \
+    --title "IB link flap killed an MPI job"
 ```
 
-That scaffolds the directory and prints the full checklist. In outline:
+Run it on a host that can see the job. It runs the producers the collectors
+read, saves exactly what they printed under the names replay expects, pre-fills
+`meta.yaml` from your site profile, and reports what it could not capture and
+what identifying material the scanner found. Then:
 
-1. **Capture.** Put the raw producer output in `input/`. Keep it byte-realistic —
-   Phase 1 collectors have to parse these files, so do not annotate them.
-2. **Redact by hand.** The scanner is a backstop, not the process (§3). The
-   conventions are below.
-3. **`make scan-fixtures`.** Clean, or every finding accounted for.
-4. **Fill in `meta.yaml`.** Every `TODO` goes. `expected_root_cause` is the eval
-   target and deserves real thought. Set `incident.job` and `incident.node`: the
-   replay harness needs a job to investigate, and takes it from here rather than
-   from the expected events — otherwise it would be handing the collector the
-   answer it is meant to be finding.
-5. **Write `expected/events.json`.** Canonical form; the loader checks.
+1. **Redact by hand.** The scanner is a backstop, not the process (§3). The
+   conventions are below. capture deliberately does not redact for you: a tool
+   that did would become the process, and the first thing it failed to recognize
+   would land in the corpus unnoticed.
+2. **`make scan-fixtures`.** Clean, or every finding accounted for.
+3. **Complete `meta.yaml`.** Every `TODO` goes. `expected_root_cause` is the eval
+   target and deserves real thought. `incident.job` and `incident.node` are
+   already filled in — the replay harness takes the job from here rather than
+   from the expected events, so that it is not handed the answer it is meant to
+   be finding.
+4. **Write `expected/events.json`.** Canonical form; the loader checks.
+5. **Set `redacted_by` and `redaction_method`.** Until these are set the fixture
+   is treated as *in progress*: skipped with a note, never loaded, and never
+   counted toward accuracy. That is what lets twenty half-finished captures sit
+   in the corpus for weeks without breaking `go test`.
 6. **`make check`.**
+
+`make new-fixture SLUG=... TITLE="..."` still scaffolds an empty directory by
+hand, which is what you want for an authored synthetic fixture — for those,
+pass `SYNTHETIC=1`.
 
 ### If the incident needs a class that does not exist
 

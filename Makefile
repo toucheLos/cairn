@@ -19,6 +19,7 @@ help:
 	@echo "  make check           build, vet, test, and scan the corpus"
 	@echo "  make test            go test $(PKG)"
 	@echo "  make scan-fixtures   check the corpus for unredacted material"
+	@echo "  make check-boundary  assert no observed incident is committed"
 	@echo "  make new-fixture     scaffold a fixture   (SLUG=... TITLE=\"...\")"
 	@echo "  make classes         list the class enum and its registered detail keys"
 	@echo "  make demo-site       show \`cairn init\` and \`cairn diff\` on a fixture"
@@ -27,8 +28,15 @@ help:
 	@echo "  make verify-guards   prove the guards actually fail when violated"
 
 .PHONY: check
-check: build vet test scan-fixtures
+check: build vet test scan-fixtures check-boundary
 	@echo "OK"
+
+# Assert no observed incident is committed to this repository (CLAUDE.md §3).
+# Cheap, and the failure it catches cannot be undone once pushed, so it runs as
+# part of the ordinary check rather than waiting for CI.
+.PHONY: check-boundary
+check-boundary:
+	@./scripts/check-boundary.sh
 
 .PHONY: build
 build:

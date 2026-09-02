@@ -5,6 +5,18 @@
 *.out
 *.prof
 
+# The private corpus: observed incidents, captured by `cairn capture`.
+#
+# CLAUDE.md §3 — raw producer output, hand-redacted output, and the event streams
+# derived from them never reach this repository. Only the taxonomy built from
+# them and the accuracy measured over them are published.
+#
+# This is the weakest of the three guards, because `git add -f` steps over it.
+# scripts/pre-commit refuses the staging, and scripts/check-boundary.sh asserts
+# nothing observed is tracked — that one runs in CI, on GitHub, so it catches a
+# bypass of the other two.
+/corpus/
+
 # Site-local configuration: generated per deployment, never committed upstream.
 # `cairn init` writes this; admins review and commit it in THEIR repo, not ours.
 site.yaml

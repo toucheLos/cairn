@@ -7,6 +7,7 @@
 //	cairn init                 probe this stack, write a reviewable site.yaml
 //	cairn context --job <id>   evidence for one job, ready to paste into an LLM
 //	cairn doctor               what each collector can and cannot see, and why
+//	cairn capture --job <id>   save a real incident into the private corpus
 //	cairn profile              this node's drift keys, for `cairn diff`
 //	cairn diff <node>          how a node differs from its fleet siblings
 //	cairn miss --job <id>      record a case cairn got wrong
@@ -25,6 +26,7 @@ commands:
   init      probe this host's stack and write a reviewable site.yaml
   context   evidence for one job, deterministically ordered and token-budgeted
   doctor    what each collector can and cannot see, and why
+  capture   save a real incident into the private corpus, for the eval set
   profile   this node's configuration drift keys, as JSON
   diff      how a node differs from its fleet siblings
   miss      record a case cairn got wrong, to drive what gets built next
@@ -46,6 +48,8 @@ func main() {
 	switch os.Args[1] {
 	case "init":
 		err = runInit(os.Args[2:])
+	case "capture":
+		err = runCapture(os.Args[2:])
 	case "profile":
 		err = runProfile(os.Args[2:])
 	case "diff":
