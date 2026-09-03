@@ -104,8 +104,9 @@ join/         correlation on (node, jobid, time)
 redact/       deterministic pseudonymization, applied before anything leaves
 site/         discovery, site.yaml, capability gating, fleet-relative drift
 taxonomy/     signature → cause → remediation, with confidence
-policy/       default-deny allowlist, dry-run, audit log  (Phase 4)
-cmd/cairn/    init | context | doctor | profile | diff | miss
+policy/       default-deny allowlist, dry-run, audit log. Null action set.
+yamlsub/      the bounded YAML subset site.yaml and policy.yaml are written in
+cmd/cairn/    init | context | doctor | capture | profile | diff | policy | miss
 ```
 
 **The event schema** is the most important artifact in the project:
@@ -126,9 +127,13 @@ what each collector can and cannot see, and why.
 
 ## 5. Current phase
 
-**Phase 3 is current.** Phases 0–2 are below with their status; the one
-outstanding item across all of them is Phase 2's dogfooding, which is not
-optional and has not started.
+**Phase 4 is current**, entered from its far end: the policy engine is built
+against a null action set, because that is the one piece of Phase 4 that needs
+neither the corpus nor a cluster.
+
+Everything else that remains is gated on evidence — the ~20 real incidents and
+Phase 2's four weeks of dogfooding, neither of which has started. Phases 0–3
+are below with their status.
 
 **Phase 0 — foundations.** Nothing is shipped.
 
@@ -241,6 +246,42 @@ the corpus arguing with the design rather than the other way around:
 A known gap, found by running `doctor` on this laptop and deliberately left:
 `doctor` reports `N warning(s)` but has no `-v` to show them, while `context`
 has one. The warnings are the miss log.
+
+**Phase 4 — the compounding asset.** Started, from the far end.
+
+- [x] **Policy engine, against a null action set.** The gate is built and proven
+      while the blast radius is provably zero. `ShippedActions()` returns
+      nothing, and a guard asserts it — so "cairn cannot act" is a fact about
+      the binary rather than a claim in a comment.
+
+      Six properties, each a test and each a guard watched to fail: the action
+      set is empty; an implemented action is still denied unless a policy lists
+      it; an empty scope authorizes no targets rather than all of them; an
+      action that cannot say how it is undone does not run; a policy written for
+      one cluster does not authorize another; and if the audit log cannot be
+      written the action is refused.
+
+      That last one is the ordering that cannot be retrofitted. An actuation
+      that happened with no record of it is only discoverable by noticing the
+      damage.
+
+      Two structural choices carry more weight than they look: the action set is
+      a field on `Engine` with no exported way to add to it, so nothing outside
+      the package can hand an actuation to a production engine; and `policy/`
+      imports neither `collectors`, `site` nor `join`, so there is provably no
+      route from it to a cluster in this build.
+
+- [ ] **The three actuations** — drain node, requeue job, rerun health check.
+      Deliberately absent. §6 puts them after the gate is proven, and
+      `policy/doc.go` calls that ordering easy to get backwards.
+- [ ] **Taxonomy v1.** Blocked on the corpus, and that is the right kind of
+      blocked: built on seven fixtures we authored ourselves it would encode our
+      guesses as the moat.
+- [ ] **Read-only MCP surface.**
+
+`yamlsub/` was extracted from `site/` so `policy.yaml` could share one parser
+rather than growing a second. The site goldens are byte-identical across the
+move, which is what says it was clean.
 
 ---
 

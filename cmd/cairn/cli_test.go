@@ -540,3 +540,107 @@ func TestDoctorShowsWarnings(t *testing.T) {
 		}
 	}
 }
+
+// ---------- policy ----------
+
+// TestPolicyShowsTheNullActionSet: the first thing an operator must be able to
+// learn from this command is that cairn cannot act.
+func TestPolicyShowsTheNullActionSet(t *testing.T) {
+	bin := buildCairn(t)
+	got := run(t, bin, policyEnv(t), "policy")
+	if got.code != 0 {
+		t.Fatalf("exit %d: %s", got.code, got.stderr)
+	}
+	for _, want := range []string{"ACTIONS THIS BUILD CAN PERFORM", "none.", "read-only"} {
+		if !strings.Contains(got.stdout, want) {
+			t.Errorf("policy output lacks %q:\n%s", want, got.stdout)
+		}
+	}
+}
+
+// TestPolicyCheckAlwaysDenies. Every one of these is an action §6 will
+// eventually permit, and none of them can run today.
+func TestPolicyCheckAlwaysDenies(t *testing.T) {
+	bin := buildCairn(t)
+	for _, kind := range []string{"drain_node", "requeue_job", "rerun_health_check"} {
+		got := run(t, bin, policyEnv(t), "policy", "check", "--kind", kind, "--target-node", "node-0001")
+		if got.code == 0 {
+			t.Errorf("%s was not denied", kind)
+		}
+		if !strings.Contains(got.stdout, "DENIED") {
+			t.Errorf("%s: output does not say DENIED:\n%s", kind, got.stdout)
+		}
+		// A denial that does not say why sends an operator to edit the wrong file.
+		if !strings.Contains(got.stdout, "no actions at all") {
+			t.Errorf("%s: denial does not explain which gate refused:\n%s", kind, got.stdout)
+		}
+	}
+}
+
+// TestPolicyCheckRecordsNothing: exploring a policy must not fill the audit log
+// with hypotheticals, or the log stops being worth reading.
+func TestPolicyCheckRecordsNothing(t *testing.T) {
+	bin := buildCairn(t)
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "audit.jsonl")
+	env := []string{"CAIRN_AUDIT_LOG=" + logPath, "CAIRN_POLICY=" + filepath.Join(dir, "none.yaml")}
+
+	run(t, bin, env, "policy", "check", "--kind", "drain_node", "--target-node", "n1")
+	if _, err := os.Stat(logPath); !os.IsNotExist(err) {
+		t.Errorf("policy check wrote to the audit log at %s", logPath)
+	}
+}
+
+// TestPolicyExampleIsSafe: the starter file cairn hands an operator must permit
+// nothing and must still be a dry run.
+func TestPolicyExampleIsSafe(t *testing.T) {
+	bin := buildCairn(t)
+	got := run(t, bin, policyEnv(t), "policy", "--example")
+	if got.code != 0 {
+		t.Fatalf("exit %d: %s", got.code, got.stderr)
+	}
+	for _, want := range []string{"allow: []", "nodes: []", "jobs: []", "dry_run: true"} {
+		if !strings.Contains(got.stdout, want) {
+			t.Errorf("the starter policy lacks %q:\n%s", want, got.stdout)
+		}
+	}
+	// It must also be readable back by the thing that wrote it.
+	f := filepath.Join(t.TempDir(), "policy.yaml")
+	if err := os.WriteFile(f, []byte(got.stdout), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	back := run(t, bin, []string{"CAIRN_POLICY=" + f, "CAIRN_AUDIT_LOG=" + filepath.Join(t.TempDir(), "a.jsonl")}, "policy")
+	if back.code != 0 || strings.Contains(back.stderr, "could not be read") {
+		t.Errorf("cairn cannot read back its own starter policy: %s", back.stderr)
+	}
+}
+
+// TestPolicyRejectsBadFileAndStillDenies: a policy that fails to parse must be
+// reported and must leave nothing permitted.
+func TestPolicyRejectsBadFile(t *testing.T) {
+	bin := buildCairn(t)
+	dir := t.TempDir()
+	f := filepath.Join(dir, "policy.yaml")
+	if err := os.WriteFile(f, []byte("allow: [drain_node]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env := []string{"CAIRN_POLICY=" + f, "CAIRN_AUDIT_LOG=" + filepath.Join(dir, "audit.jsonl")}
+
+	got := run(t, bin, env, "policy")
+	if !strings.Contains(got.stderr, "nothing is permitted") {
+		t.Errorf("a bad policy file should be reported as permitting nothing:\n%s", got.stderr)
+	}
+	if !strings.Contains(got.stdout, "allow:   (none)") {
+		t.Errorf("a bad policy file left something permitted:\n%s", got.stdout)
+	}
+}
+
+// policyEnv isolates a test from the developer's real policy and audit log.
+func policyEnv(t *testing.T) []string {
+	t.Helper()
+	dir := t.TempDir()
+	return []string{
+		"CAIRN_POLICY=" + filepath.Join(dir, "absent.yaml"),
+		"CAIRN_AUDIT_LOG=" + filepath.Join(dir, "audit.jsonl"),
+	}
+}

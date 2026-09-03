@@ -192,6 +192,61 @@ expect_fail "the public corpus refuses an observed fixture" \
 	go test ./fixtures -run TestPublicCorpusIsSynthetic
 restore
 
+# 13. The shipped binary can perform no actuation at all.
+#
+#     CLAUDE.md §6: the policy engine is built and tested against a null action
+#     set, and only once it is proven correct do the three reversible actuations
+#     exist. policy/doc.go calls that ordering "easy to get backwards", so this
+#     makes it a fact about the binary rather than a claim in a comment. Adding
+#     an actuation must fail here until someone deliberately changes this guard.
+stash policy/action.go
+sed -i 's|^var shippedActions = \[\]ActionSpec{}$|var shippedActions = []ActionSpec{{Kind: "guard.probe", Undo: "n/a"}}|' policy/action.go
+expect_fail "the shipped action set is empty" go test ./policy -run TestNullActionSet
+restore
+
+# 14. Default-deny survives.
+#
+#     Deliberately exercised against an action the engine *does* implement, so it
+#     cannot pass merely because nothing exists — that is the failure mode of a
+#     test written against a null set.
+stash policy/engine.go
+sed -i 's|if !e.policy.Allows(req.Kind) {|if false {|' policy/engine.go
+expect_fail "an unlisted action is denied" go test ./policy -run TestDefaultDenyWithKnownAction
+restore
+
+# 15. No audit record, no action.
+#
+#     The one ordering here that cannot be retrofitted: an actuation that
+#     happened with no record of it is only discoverable by noticing the damage.
+stash policy/engine.go
+sed -i 's|if err := e.audit.Record(d); err != nil {|if err := e.audit.Record(d); false {|' policy/engine.go
+expect_fail "an unwritable audit log denies the action" go test ./policy -run TestAuditFailureDenies
+restore
+
+# 16. An empty scope is not every target.
+#
+#     One character between "this policy names no nodes" and "this policy names
+#     all of them".
+stash policy/config.go
+sed -i 's|^func matchAny(patterns \[\]string, v string) bool {|func matchAny(patterns []string, v string) bool {\n\tif len(patterns) == 0 { return true }|' policy/config.go
+expect_fail "an empty scope authorizes nothing" go test ./policy -run TestEmptyScopeIsNotEveryTarget
+restore
+
+# 17. The policy package has no route to the cluster.
+#
+#     With no actuations there is nothing to execute, and keeping the dependency
+#     absent means the absence is checkable rather than asserted. If policy ever
+#     imports collectors, that is the commit to look at.
+POLICY_DEPS=$(go list -deps ./policy | grep -E 'touchelos/cairn/(collectors|site|join)' || true)
+if [ -z "$POLICY_DEPS" ]; then
+	printf '  ok    the policy package cannot reach the cluster\n'
+	pass=$((pass + 1))
+else
+	printf '  FAIL  the policy package now depends on:\n'
+	printf '          %s\n' $POLICY_DEPS
+	fail=$((fail + 1))
+fi
+
 echo
 if [ "$fail" -ne 0 ]; then
 	echo "$fail guard(s) did not fire. Fix them before trusting any of this."

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/touchelos/cairn/schema"
+	"github.com/touchelos/cairn/yamlsub"
 )
 
 // header is the preamble of every generated site.yaml.
@@ -40,97 +41,97 @@ func (p Profile) EncodeYAML() ([]byte, error) {
 	if p.Cluster == "" {
 		return nil, fmt.Errorf("site: profile has no cluster name")
 	}
-	root := mapNode()
+	root := yamlsub.Map()
 
-	root.setRaw("version", "Format version of this file, not cairn's event schema.",
+	root.SetRaw("version", "Format version of this file, not cairn's event schema.",
 		strconv.Itoa(orDefault(p.Version, ProfileVersion)))
-	root.set("cluster",
+	root.Set("cluster",
 		"The name stamped on every event collected here. Two clusters sharing a\n"+
 			"name make two sites' bundles look like one site's, so make it unique.",
 		string(p.Cluster))
 
-	sched := mapNode()
-	sched.set("kind", "", p.Scheduler.Kind)
-	sched.set("version", "", p.Scheduler.Version)
-	sched.set("config_path", "", p.Scheduler.ConfigPath)
-	sched.setList("partitions", "", p.Scheduler.Partitions)
-	sched.setList("qos", "", p.Scheduler.QOS)
-	root.setNode("scheduler",
+	sched := yamlsub.Map()
+	sched.Set("kind", "", p.Scheduler.Kind)
+	sched.Set("version", "", p.Scheduler.Version)
+	sched.Set("config_path", "", p.Scheduler.ConfigPath)
+	sched.SetList("partitions", "", p.Scheduler.Partitions)
+	sched.SetList("qos", "", p.Scheduler.QOS)
+	root.SetNode("scheduler",
 		"The batch system. This is the single most load-bearing value in the file:\n"+
 			"it is what stops a model answering a Slurm question with PBS syntax.",
 		sched)
 
-	mods := mapNode()
-	mods.set("kind", "", p.Modules.Kind)
-	mods.setList("roots", "", p.Modules.Roots)
-	root.setNode("modules",
+	mods := yamlsub.Map()
+	mods.Set("kind", "", p.Modules.Kind)
+	mods.SetList("roots", "", p.Modules.Roots)
+	root.SetNode("modules",
 		"Environment modules. Needed to answer \"why can't I load this module\"\n"+
 			"against what this site actually publishes.", mods)
 
 	if len(p.Builders) > 0 {
-		bs := seqNode()
+		bs := yamlsub.Seq()
 		for _, b := range p.Builders {
-			m := mapNode()
-			m.set("kind", "", b.Kind)
-			m.set("root", "", b.Root)
-			bs.items = append(bs.items, m)
+			m := yamlsub.Map()
+			m.Set("kind", "", b.Kind)
+			m.Set("root", "", b.Root)
+			bs.Append(m)
 		}
-		root.setNode("builders", "Spack and EasyBuild installation roots.", bs)
+		root.SetNode("builders", "Spack and EasyBuild installation roots.", bs)
 	}
 
-	osn := mapNode()
-	osn.set("id", "", p.OS.ID)
-	osn.set("version_id", "", p.OS.VersionID)
-	osn.set("kernel_release", "", p.OS.KernelRelease)
-	osn.set("glibc_version", "", p.OS.GlibcVersion)
-	root.setNode("os", "Base system. Drift in these is invisible until jobs die.", osn)
+	osn := yamlsub.Map()
+	osn.Set("id", "", p.OS.ID)
+	osn.Set("version_id", "", p.OS.VersionID)
+	osn.Set("kernel_release", "", p.OS.KernelRelease)
+	osn.Set("glibc_version", "", p.OS.GlibcVersion)
+	root.SetNode("os", "Base system. Drift in these is invisible until jobs die.", osn)
 
-	fab := mapNode()
-	fab.set("kind", "", p.Fabric.Kind)
-	fab.setList("hcas", "", p.Fabric.HCAs)
-	fab.setList("rates", "", p.Fabric.Rates)
-	root.setNode("fabric", "High-speed interconnect.", fab)
+	fab := yamlsub.Map()
+	fab.Set("kind", "", p.Fabric.Kind)
+	fab.SetList("hcas", "", p.Fabric.HCAs)
+	fab.SetList("rates", "", p.Fabric.Rates)
+	root.SetNode("fabric", "High-speed interconnect.", fab)
 
-	gpu := mapNode()
-	gpu.set("vendor", "", p.GPU.Vendor)
-	gpu.set("driver_version", "", p.GPU.DriverVersion)
-	gpu.set("cuda_version", "", p.GPU.CUDAVersion)
-	gpu.setList("models", "", p.GPU.Models)
+	gpu := yamlsub.Map()
+	gpu.Set("vendor", "", p.GPU.Vendor)
+	gpu.Set("driver_version", "", p.GPU.DriverVersion)
+	gpu.Set("cuda_version", "", p.GPU.CUDAVersion)
+	gpu.SetList("models", "", p.GPU.Models)
 	if p.GPU.Vendor != "" {
-		gpu.setRaw("dcgm", "", strconv.FormatBool(p.GPU.DCGM))
+		gpu.SetRaw("dcgm", "", strconv.FormatBool(p.GPU.DCGM))
 	}
-	root.setNode("gpu", "Accelerators.", gpu)
+	root.SetNode("gpu", "Accelerators.", gpu)
 
 	if len(p.Mounts) > 0 {
-		ms := seqNode()
+		ms := yamlsub.Seq()
 		for _, m := range p.Mounts {
-			n := mapNode()
-			n.set("mountpoint", "", m.Mountpoint)
-			n.set("fstype", "", m.FSType)
-			n.set("source", "", m.Source)
-			ms.items = append(ms.items, n)
+			n := yamlsub.Map()
+			n.Set("mountpoint", "", m.Mountpoint)
+			n.Set("fstype", "", m.FSType)
+			n.Set("source", "", m.Source)
+			ms.Append(n)
 		}
-		root.setNode("mounts",
+		root.SetNode("mounts",
 			"Shared filesystems. The root filesystem and other node-local mounts are\n"+
 				"omitted: what matters is what a submission script can reference.", ms)
 	}
 
-	bmc := mapNode()
-	bmc.set("kind", "", p.BMC.Kind)
+	bmc := yamlsub.Map()
+	bmc.Set("kind", "", p.BMC.Kind)
 	if p.BMC.Kind != "" && p.BMC.Kind != "none" {
-		bmc.setRaw("reachable", "", strconv.FormatBool(p.BMC.Reachable))
+		bmc.SetRaw("reachable", "", strconv.FormatBool(p.BMC.Reachable))
 	}
-	root.setNode("bmc", "Out-of-band management.", bmc)
+	root.SetNode("bmc", "Out-of-band management.", bmc)
 
 	if len(p.Metrics) > 0 {
-		ms := seqNode()
+		ms := yamlsub.Seq()
 		for _, m := range p.Metrics {
-			n := mapNode()
-			n.set("kind", "", m.Kind)
-			n.set("endpoint", "", m.Endpoint)
-			ms.items = append(ms.items, n)
+			n := yamlsub.Map()
+			n.Set("kind", "", m.Kind)
+			n.Set("endpoint", "", m.Endpoint)
+			ms.Append(n)
 		}
-		root.setNode("metrics",
+		root.SetNode("metrics",
 			"Telemetry already deployed here. cairn reads from these where present\n"+
 				"rather than asking anyone to replace them.", ms)
 	}
@@ -143,15 +144,15 @@ func (p Profile) EncodeYAML() ([]byte, error) {
 	// the difference between "there is no GPU stack here" and "cairn never
 	// managed to look", and that is exactly what these entries record.
 	if gaps := p.Missing(); len(gaps) > 0 {
-		ps := seqNode()
+		ps := yamlsub.Seq()
 		for _, pr := range gaps {
-			n := mapNode()
-			n.set("name", "", pr.Name)
-			n.set("level", "", pr.Level.String())
-			n.set("detail", "", pr.Detail)
-			ps.items = append(ps.items, n)
+			n := yamlsub.Map()
+			n.Set("name", "", pr.Name)
+			n.Set("level", "", pr.Level.String())
+			n.Set("detail", "", pr.Detail)
+			ps.Append(n)
 		}
-		root.setNode("gaps",
+		root.SetNode("gaps",
 			"What cairn looked for and did not find.\n"+
 				"\n"+
 				"Usually correct — a CPU-only site has no GPU stack, and a tenant node has\n"+
@@ -165,7 +166,7 @@ func (p Profile) EncodeYAML() ([]byte, error) {
 	var b strings.Builder
 	b.WriteString(header)
 	b.WriteString("\n")
-	root.encode(&b, 0)
+	b.WriteString(root.Render())
 	return []byte(b.String()), nil
 }
 
@@ -182,73 +183,73 @@ func orDefault(v, def int) int {
 // the first: an admin correcting a file wants the whole list, not one error per
 // edit-and-rerun cycle.
 func DecodeYAML(data []byte) (Profile, error) {
-	root, err := parseYAML(data)
+	root, err := yamlsub.Parse(data)
 	if err != nil {
 		return Profile{}, fmt.Errorf("site.yaml: %w", err)
 	}
-	if root.kind != yMap {
+	if !root.IsMap() {
 		return Profile{}, fmt.Errorf("site.yaml: expected a mapping at the top level")
 	}
 
-	r := newReader(root, "")
+	r := yamlsub.NewReader(root, "")
 	var p Profile
-	p.Version = r.intOr("version", ProfileVersion)
-	p.Cluster = schema.ClusterName(r.str("cluster"))
+	p.Version = r.IntOr("version", ProfileVersion)
+	p.Cluster = schema.ClusterName(r.Str("cluster"))
 
-	sched := r.sub("scheduler")
+	sched := r.Sub("scheduler")
 	p.Scheduler = Scheduler{
-		Kind:       sched.str("kind"),
-		Version:    sched.str("version"),
-		ConfigPath: sched.str("config_path"),
-		Partitions: sched.list("partitions"),
-		QOS:        sched.list("qos"),
+		Kind:       sched.Str("kind"),
+		Version:    sched.Str("version"),
+		ConfigPath: sched.Str("config_path"),
+		Partitions: sched.List("partitions"),
+		QOS:        sched.List("qos"),
 	}
 
-	mods := r.sub("modules")
-	p.Modules = Modules{Kind: mods.str("kind"), Roots: mods.list("roots")}
+	mods := r.Sub("modules")
+	p.Modules = Modules{Kind: mods.Str("kind"), Roots: mods.List("roots")}
 
-	var builderReaders []*reader
-	for _, br := range r.seq("builders") {
-		p.Builders = append(p.Builders, Builder{Kind: br.str("kind"), Root: br.str("root")})
+	var builderReaders []*yamlsub.Reader
+	for _, br := range r.Each("builders") {
+		p.Builders = append(p.Builders, Builder{Kind: br.Str("kind"), Root: br.Str("root")})
 		builderReaders = append(builderReaders, br)
 	}
 
-	osr := r.sub("os")
+	osr := r.Sub("os")
 	p.OS = OSFacts{
-		ID:            osr.str("id"),
-		VersionID:     osr.str("version_id"),
-		KernelRelease: osr.str("kernel_release"),
-		GlibcVersion:  osr.str("glibc_version"),
+		ID:            osr.Str("id"),
+		VersionID:     osr.Str("version_id"),
+		KernelRelease: osr.Str("kernel_release"),
+		GlibcVersion:  osr.Str("glibc_version"),
 	}
 
-	fab := r.sub("fabric")
-	p.Fabric = Fabric{Kind: fab.str("kind"), HCAs: fab.list("hcas"), Rates: fab.list("rates")}
+	fab := r.Sub("fabric")
+	p.Fabric = Fabric{Kind: fab.Str("kind"), HCAs: fab.List("hcas"), Rates: fab.List("rates")}
 
-	gpu := r.sub("gpu")
+	gpu := r.Sub("gpu")
 	p.GPU = GPUFacts{
-		Vendor:        gpu.str("vendor"),
-		DriverVersion: gpu.str("driver_version"),
-		CUDAVersion:   gpu.str("cuda_version"),
-		Models:        gpu.list("models"),
-		DCGM:          gpu.boolean("dcgm"),
+		Vendor:        gpu.Str("vendor"),
+		DriverVersion: gpu.Str("driver_version"),
+		CUDAVersion:   gpu.Str("cuda_version"),
+		Models:        gpu.List("models"),
+		DCGM:          gpu.Bool("dcgm"),
 	}
 
-	var mountReaders []*reader
-	for _, mr := range r.seq("mounts") {
+	var mountReaders []*yamlsub.Reader
+	for _, mr := range r.Each("mounts") {
 		p.Mounts = append(p.Mounts, Mount{
-			Mountpoint: mr.str("mountpoint"),
-			FSType:     mr.str("fstype"),
-			Source:     mr.str("source"),
+			Mountpoint: mr.Str("mountpoint"),
+			FSType:     mr.Str("fstype"),
+			Source:     mr.Str("source"),
 		})
 		mountReaders = append(mountReaders, mr)
 	}
 
-	bmc := r.sub("bmc")
-	p.BMC = BMCFacts{Kind: bmc.str("kind"), Reachable: bmc.boolean("reachable")}
+	bmc := r.Sub("bmc")
+	p.BMC = BMCFacts{Kind: bmc.Str("kind"), Reachable: bmc.Bool("reachable")}
 
-	var metricReaders []*reader
-	for _, mr := range r.seq("metrics") {
-		p.Metrics = append(p.Metrics, MetricsSystem{Kind: mr.str("kind"), Endpoint: mr.str("endpoint")})
+	var metricReaders []*yamlsub.Reader
+	for _, mr := range r.Each("metrics") {
+		p.Metrics = append(p.Metrics, MetricsSystem{Kind: mr.Str("kind"), Endpoint: mr.Str("endpoint")})
 		metricReaders = append(metricReaders, mr)
 	}
 
@@ -257,28 +258,28 @@ func DecodeYAML(data []byte) (Profile, error) {
 	// fact about this site — so a decoded profile carries the record of the gap
 	// without the explanation, which is all any consumer of a stored profile
 	// needs.
-	var probeReaders []*reader
-	for _, pr := range r.seq("gaps") {
+	var probeReaders []*yamlsub.Reader
+	for _, pr := range r.Each("gaps") {
 		level := LevelUnprivileged
-		if pr.str("level") == "privileged" {
+		if pr.Str("level") == "privileged" {
 			level = LevelPrivileged
 		}
 		p.Probes = append(p.Probes, Probe{
-			Name:      pr.str("name"),
+			Name:      pr.Str("name"),
 			Level:     level,
 			Available: false,
-			Detail:    pr.str("detail"),
+			Detail:    pr.Str("detail"),
 		})
 		probeReaders = append(probeReaders, pr)
 	}
 
-	all := []*reader{r, sched, mods, osr, fab, gpu, bmc}
+	all := []*yamlsub.Reader{r, sched, mods, osr, fab, gpu, bmc}
 	all = append(all, builderReaders...)
 	all = append(all, mountReaders...)
 	all = append(all, metricReaders...)
 	all = append(all, probeReaders...)
 
-	if errs := collectErrs(all...); len(errs) > 0 {
+	if errs := yamlsub.CollectErrors(all...); len(errs) > 0 {
 		return Profile{}, fmt.Errorf("site.yaml:\n  %s", strings.Join(errs, "\n  "))
 	}
 	if p.Cluster == "" {

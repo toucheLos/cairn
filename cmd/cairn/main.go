@@ -10,6 +10,7 @@
 //	cairn capture --job <id>   save a real incident into the private corpus
 //	cairn profile              this node's drift keys, for `cairn diff`
 //	cairn diff <node>          how a node differs from its fleet siblings
+//	cairn policy               what cairn is permitted to do (currently: nothing)
 //	cairn miss --job <id>      record a case cairn got wrong
 package main
 
@@ -29,6 +30,7 @@ commands:
   capture   save a real incident into the private corpus, for the eval set
   profile   this node's configuration drift keys, as JSON
   diff      how a node differs from its fleet siblings
+  policy    what cairn is permitted to do to this cluster (currently: nothing)
   miss      record a case cairn got wrong, to drive what gets built next
   version   schema version and build information
 
@@ -58,6 +60,8 @@ func main() {
 		err = runContext(os.Args[2:])
 	case "doctor":
 		err = runDoctor(os.Args[2:])
+	case "policy":
+		err = runPolicy(os.Args[2:])
 	case "miss":
 		err = runMiss(os.Args[2:])
 	case "version":

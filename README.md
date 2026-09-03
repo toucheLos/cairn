@@ -160,6 +160,37 @@ cairn implements no fan-out of its own — `srun`, `pdsh` and `clush` already
 exist, and shipping remote execution would mean an ssh dependency and a second
 read-only boundary to get right.
 
+## What cairn is allowed to do
+
+Nothing. That is checked, not asserted:
+
+```sh
+cairn policy
+```
+
+```
+ACTIONS THIS BUILD CAN PERFORM
+  none.
+
+  cairn is read-only. The policy engine is built and proven against an
+  empty action set first, and the three reversible actuations §6 permits —
+  drain node, requeue job, rerun health check — come afterwards.
+```
+
+The policy engine exists and is complete: default-deny allowlist, target
+scoping, dry-run, and an append-only audit log that records denials as well as
+approvals. What it gates is an empty set, and a guard fails the build if that
+stops being true.
+
+Building the gate first is the point rather than an accident of ordering. Every
+mistake in an authorization path is discovered the first time it wrongly permits
+something, and by then it has permitted it. This is the only moment that can be
+got wrong for free.
+
+One rule is worth stating outright: **if the audit log cannot be written, the
+action is refused.** An actuation that happened with no record of it is only
+discoverable by noticing the damage.
+
 ## Layout
 
 ```
@@ -169,9 +200,10 @@ redact/       deterministic pseudonymization + the pre-commit scanner
 collectors/   capability-gated readers: slurm, journal, gpu
 join/         correlation on (node, jobid, time)
 site/         discovery, site.yaml, fleet-relative drift
-cmd/cairn/    init · context · doctor · profile · diff · miss
+yamlsub/      the bounded YAML subset the config files use
+cmd/cairn/    init · context · doctor · capture · profile · diff · policy · miss
+policy/       default-deny allowlist, dry-run, audit log   <- no actions exist
 taxonomy/     signature -> cause -> remediation            (Phase 4)
-policy/       default-deny allowlist, dry-run, audit log   (Phase 4)
 ```
 
 `fabric`, `storage` and `bmc` have no collector yet. `cairn doctor` says so

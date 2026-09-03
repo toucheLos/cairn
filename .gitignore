@@ -20,6 +20,7 @@
 # Site-local configuration: generated per deployment, never committed upstream.
 # `cairn init` writes this; admins review and commit it in THEIR repo, not ours.
 site.yaml
+policy.yaml
 *.local.*
 *.local
 

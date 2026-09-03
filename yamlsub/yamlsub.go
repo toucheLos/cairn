@@ -1,20 +1,16 @@
-package site
-
-import (
-	"fmt"
-	"sort"
-	"strconv"
-	"strings"
-)
-
-// This file is a YAML writer and reader for exactly the subset site.yaml uses.
+// Package yamlsub reads and writes the bounded YAML subset cairn uses for its
+// reviewable configuration files: site.yaml and policy.yaml.
 //
 // It exists because scripts/verify-guards.sh §8 asserts that the shipped binary
-// links no third-party code: cairn is aimed at sites that read what they deploy,
+// links no third-party code. cairn is aimed at sites that read what they deploy,
 // and gopkg.in/yaml.v3 — a real dependency of the fixture loader — must not
 // reach cmd/cairn. schema/encode.go already makes this trade for canonical JSON,
 // and the reasoning carries: a bounded format we emit and consume ourselves is
 // cheaper to review than a general parser, and it cannot surprise us.
+//
+// YAML rather than JSON because these files exist to be corrected by a human,
+// and a file nobody can annotate is a file nobody will correct. Comments are the
+// point.
 //
 // The supported subset is deliberately small:
 //
@@ -31,87 +27,99 @@ import (
 // documents, tabs — is rejected with an error naming the line. Silently
 // accepting a construct we do not model would mean an admin's hand edit is read
 // as something other than what they wrote, which is worse than refusing it.
+//
+// Decoding rejects unknown keys, for the same reason (schema/DESIGN.md §8): in a
+// hand-edited file a typo must fail loudly rather than leave the file saying one
+// thing and the tool doing another.
+package yamlsub
 
-// ykind is the shape of a document node.
-type ykind int
+import (
+	"fmt"
+	"sort"
+	"strconv"
+	"strings"
+)
+
+// nodeKind is the shape of a document node.
+type nodeKind int
 
 const (
-	yScalar ykind = iota
+	yScalar nodeKind = iota
 	yRaw
 	yMap
 	ySeq
 )
 
-// yfield is one key/value pair in a mapping. Ordered: the emitted file's field
+// field is one key/value pair in a mapping. Ordered: the emitted file's field
 // order is fixed by construction, so two runs over the same input are
 // byte-identical (invariant §2.7).
-type yfield struct {
+type field struct {
 	key     string
 	comment string
-	val     *ynode
+	val     *Node
 }
 
-// ynode is a document node.
-type ynode struct {
-	kind   ykind
+// Node is a document node.
+type Node struct {
+	kind   nodeKind
 	scalar string
-	fields []yfield
-	items  []*ynode
+	fields []field
+	items  []*Node
 }
 
-func scalarNode(s string) *ynode { return &ynode{kind: yScalar, scalar: s} }
+func Scalar(s string) *Node { return &Node{kind: yScalar, scalar: s} }
 
-func mapNode() *ynode { return &ynode{kind: yMap} }
+func Map() *Node { return &Node{kind: yMap} }
 
-func seqNode() *ynode { return &ynode{kind: ySeq} }
+func Seq() *Node { return &Node{kind: ySeq} }
 
 // set appends a field. Empty scalars are dropped rather than emitted as `key: ""`
 // — an absent fact and a fact discovered to be the empty string are the same
 // thing here, and the shorter file is the one an admin will actually read.
-func (n *ynode) set(key, comment, value string) {
+func (n *Node) Set(key, comment, value string) {
 	if value == "" {
 		return
 	}
-	n.fields = append(n.fields, yfield{key: key, comment: comment, val: scalarNode(value)})
+	n.fields = append(n.fields, field{key: key, comment: comment, val: Scalar(value)})
 }
 
 // setRaw appends a field whose value is emitted unquoted.
 //
 // For the values that are genuinely not strings — the version integer and the
 // booleans. Passing them through set would render `version: "1"`, which is a
-// string containing a digit, and any other YAML reader an admin points at this
+// string containing a digit, and any other YAML Reader an admin points at this
 // file would agree with that reading and be wrong.
-func (n *ynode) setRaw(key, comment, value string) {
-	n.fields = append(n.fields, yfield{key: key, comment: comment, val: &ynode{kind: yRaw, scalar: value}})
+func (n *Node) SetRaw(key, comment, value string) {
+	n.fields = append(n.fields, field{key: key, comment: comment, val: &Node{kind: yRaw, scalar: value}})
 }
 
 // setNode appends a field holding a collection.
-func (n *ynode) setNode(key, comment string, val *ynode) {
+func (n *Node) SetNode(key, comment string, val *Node) {
 	if val == nil {
 		return
 	}
 	if val.kind == yMap && len(val.fields) == 0 {
 		return
 	}
-	n.fields = append(n.fields, yfield{key: key, comment: comment, val: val})
+	n.fields = append(n.fields, field{key: key, comment: comment, val: val})
 }
 
 // setList appends a sequence of scalars, omitting it entirely when empty.
-func (n *ynode) setList(key, comment string, values []string) {
+func (n *Node) SetList(key, comment string, values []string) {
 	if len(values) == 0 {
 		return
 	}
-	s := seqNode()
+	s := Seq()
 	for _, v := range values {
-		s.items = append(s.items, scalarNode(v))
+		s.items = append(s.items, Scalar(v))
 	}
-	n.fields = append(n.fields, yfield{key: key, comment: comment, val: s})
+	n.fields = append(n.fields, field{key: key, comment: comment, val: s})
 }
 
 // ---------- emitting ----------
 
 // encode renders a node at the given indent depth.
-func (n *ynode) encode(b *strings.Builder, depth int) {
+func (n *Node) render(b *strings.Builder, depth int) {
 	pad := strings.Repeat("  ", depth)
 	switch n.kind {
 	case yMap:
@@ -124,7 +132,7 @@ func (n *ynode) encode(b *strings.Builder, depth int) {
 				fmt.Fprintf(b, "%s%s: %s\n", pad, f.key, f.val.scalar)
 			default:
 				fmt.Fprintf(b, "%s%s:\n", pad, f.key)
-				f.val.encode(b, depth+1)
+				f.val.render(b, depth+1)
 			}
 		}
 	case ySeq:
@@ -148,7 +156,7 @@ func (n *ynode) encode(b *strings.Builder, depth int) {
 						continue
 					}
 					fmt.Fprintf(b, "%s%s:\n", lead, f.key)
-					f.val.encode(b, depth+2)
+					f.val.render(b, depth+2)
 				}
 			}
 		}
@@ -170,7 +178,7 @@ func writeComment(b *strings.Builder, pad, comment string) {
 }
 
 // quote wraps a scalar in double quotes when leaving it bare would change its
-// meaning — to us, or to any other YAML reader an admin points at this file.
+// meaning — to us, or to any other YAML Reader an admin points at this file.
 func quote(s string) string {
 	if s == "" {
 		return `""`
@@ -205,8 +213,8 @@ func needsQuote(s string) bool {
 
 // ---------- parsing ----------
 
-// parseYAML reads the supported subset into a document node.
-func parseYAML(data []byte) (*ynode, error) {
+// Parse reads the supported subset into a document node.
+func Parse(data []byte) (*Node, error) {
 	lines := strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n")
 
 	// Strip comments and blanks up front, keeping the original line number so
@@ -237,10 +245,10 @@ func parseYAML(data []byte) (*ynode, error) {
 	}
 
 	pos := 0
-	var parseBlock func(indent int) (*ynode, error)
+	var parseBlock func(indent int) (*Node, error)
 
-	parseBlock = func(indent int) (*ynode, error) {
-		var node *ynode
+	parseBlock = func(indent int) (*Node, error) {
+		var node *Node
 		for pos < len(src) {
 			ln := src[pos]
 			if ln.indent < indent {
@@ -252,7 +260,7 @@ func parseYAML(data []byte) (*ynode, error) {
 
 			if strings.HasPrefix(ln.text, "- ") || ln.text == "-" {
 				if node == nil {
-					node = seqNode()
+					node = Seq()
 				}
 				if node.kind != ySeq {
 					return nil, fmt.Errorf("line %d: list item inside a mapping", ln.num)
@@ -265,7 +273,7 @@ func parseYAML(data []byte) (*ynode, error) {
 				// A mapping item: the dash line carries the first key, and any
 				// continuation is indented two past the dash.
 				if key, val, ok := splitField(item); ok {
-					m := mapNode()
+					m := Map()
 					if err := addField(m, key, val, ln.num); err != nil {
 						return nil, err
 					}
@@ -286,7 +294,7 @@ func parseYAML(data []byte) (*ynode, error) {
 				if err != nil {
 					return nil, err
 				}
-				node.items = append(node.items, scalarNode(scalar))
+				node.items = append(node.items, Scalar(scalar))
 				continue
 			}
 
@@ -295,7 +303,7 @@ func parseYAML(data []byte) (*ynode, error) {
 				return nil, fmt.Errorf("line %d: %q is neither `key: value` nor a `- ` list item", ln.num, ln.text)
 			}
 			if node == nil {
-				node = mapNode()
+				node = Map()
 			}
 			if node.kind != yMap {
 				return nil, fmt.Errorf("line %d: mapping key inside a list", ln.num)
@@ -313,9 +321,9 @@ func parseYAML(data []byte) (*ynode, error) {
 			}
 			if child == nil {
 				// `key:` with nothing under it. An empty collection.
-				child = mapNode()
+				child = Map()
 			}
-			node.fields = append(node.fields, yfield{key: key, val: child})
+			node.fields = append(node.fields, field{key: key, val: child})
 		}
 		return node, nil
 	}
@@ -328,7 +336,7 @@ func parseYAML(data []byte) (*ynode, error) {
 		return nil, fmt.Errorf("line %d: unexpected indentation", src[pos].num)
 	}
 	if root == nil {
-		return mapNode(), nil
+		return Map(), nil
 	}
 	return root, nil
 }
@@ -355,16 +363,16 @@ func splitField(s string) (key, val string, ok bool) {
 	return key, val, true
 }
 
-func addField(n *ynode, key, val string, num int) error {
+func addField(n *Node, key, val string, num int) error {
 	if val == "[]" {
-		n.fields = append(n.fields, yfield{key: key, val: seqNode()})
+		n.fields = append(n.fields, field{key: key, val: Seq()})
 		return nil
 	}
 	s, err := unquote(val, num)
 	if err != nil {
 		return err
 	}
-	n.fields = append(n.fields, yfield{key: key, val: scalarNode(s)})
+	n.fields = append(n.fields, field{key: key, val: Scalar(s)})
 	return nil
 }
 
@@ -400,7 +408,7 @@ func unquote(s string, num int) (string, error) {
 
 // ---------- typed access, with unknown-key rejection ----------
 
-// reader walks a parsed mapping, tracking which keys were consumed so that
+// Reader walks a parsed mapping, tracking which keys were consumed so that
 // anything left over can be reported.
 //
 // schema/DESIGN.md §8 makes this the rule for decoding bundles, and it matters
@@ -408,18 +416,18 @@ func unquote(s string, num int) (string, error) {
 // error. Ignoring it would leave an admin looking at a file that says one thing
 // and a tool doing another, which is the specific failure this whole feature
 // exists to prevent.
-type reader struct {
-	node *ynode
+type Reader struct {
+	node *Node
 	used map[string]bool
 	path string
 	errs []string
 }
 
-func newReader(n *ynode, path string) *reader {
-	return &reader{node: n, used: map[string]bool{}, path: path}
+func NewReader(n *Node, path string) *Reader {
+	return &Reader{node: n, used: map[string]bool{}, path: path}
 }
 
-func (r *reader) field(key string) *ynode {
+func (r *Reader) field(key string) *Node {
 	r.used[key] = true
 	if r.node == nil {
 		return nil
@@ -432,7 +440,7 @@ func (r *reader) field(key string) *ynode {
 	return nil
 }
 
-func (r *reader) str(key string) string {
+func (r *Reader) Str(key string) string {
 	n := r.field(key)
 	if n == nil || (n.kind != yScalar && n.kind != yRaw) {
 		return ""
@@ -440,16 +448,16 @@ func (r *reader) str(key string) string {
 	return n.scalar
 }
 
-func (r *reader) boolean(key string) bool {
-	switch strings.ToLower(r.str(key)) {
+func (r *Reader) Bool(key string) bool {
+	switch strings.ToLower(r.Str(key)) {
 	case "true", "yes", "on":
 		return true
 	}
 	return false
 }
 
-func (r *reader) intOr(key string, def int) int {
-	s := r.str(key)
+func (r *Reader) IntOr(key string, def int) int {
+	s := r.Str(key)
 	if s == "" {
 		return def
 	}
@@ -461,7 +469,7 @@ func (r *reader) intOr(key string, def int) int {
 	return v
 }
 
-func (r *reader) list(key string) []string {
+func (r *Reader) List(key string) []string {
 	n := r.field(key)
 	if n == nil || n.kind != ySeq {
 		return nil
@@ -475,33 +483,33 @@ func (r *reader) list(key string) []string {
 	return out
 }
 
-// sub returns a reader over a nested mapping.
-func (r *reader) sub(key string) *reader {
+// sub returns a Reader over a nested mapping.
+func (r *Reader) Sub(key string) *Reader {
 	n := r.field(key)
 	if n == nil || n.kind != yMap {
-		return newReader(nil, r.path+key+".")
+		return NewReader(nil, r.path+key+".")
 	}
-	return newReader(n, r.path+key+".")
+	return NewReader(n, r.path+key+".")
 }
 
 // seq returns readers over each mapping in a sequence.
-func (r *reader) seq(key string) []*reader {
+func (r *Reader) Each(key string) []*Reader {
 	n := r.field(key)
 	if n == nil || n.kind != ySeq {
 		return nil
 	}
-	var out []*reader
+	var out []*Reader
 	for i, it := range n.items {
 		if it.kind != yMap {
 			continue
 		}
-		out = append(out, newReader(it, fmt.Sprintf("%s%s[%d].", r.path, key, i)))
+		out = append(out, NewReader(it, fmt.Sprintf("%s%s[%d].", r.path, key, i)))
 	}
 	return out
 }
 
 // checkUnknown records any key the caller never asked for.
-func (r *reader) checkUnknown() {
+func (r *Reader) checkUnknown() {
 	if r.node == nil {
 		return
 	}
@@ -521,8 +529,8 @@ func (r *reader) checkUnknown() {
 	}
 }
 
-// collect gathers errors from this reader and its children.
-func collectErrs(rs ...*reader) []string {
+// collect gathers errors from this Reader and its children.
+func CollectErrors(rs ...*Reader) []string {
 	var out []string
 	for _, r := range rs {
 		if r == nil {
@@ -532,4 +540,21 @@ func collectErrs(rs ...*reader) []string {
 		out = append(out, r.errs...)
 	}
 	return out
+}
+
+// Append adds an item to a sequence node.
+//
+// Exported so a caller building a list of mappings never touches Node's fields;
+// the document model stays this package's business.
+func (n *Node) Append(item *Node) { n.items = append(n.items, item) }
+
+// IsMap reports whether the node is a mapping. Used to check that a parsed
+// document has the shape a decoder expects before it starts reading keys.
+func (n *Node) IsMap() bool { return n != nil && n.kind == yMap }
+
+// Render returns the node as YAML text, starting at the left margin.
+func (n *Node) Render() string {
+	var b strings.Builder
+	n.render(&b, 0)
+	return b.String()
 }
