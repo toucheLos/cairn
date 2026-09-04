@@ -21,6 +21,38 @@ The failure mode to avoid: building an LLM that shells into a login node and gre
 That is already commodity — several free single-file MCP servers do it. The value is
 in the substrate underneath, not the chat interface on top.
 
+### The end product
+
+One static binary an admin copies onto a login node. No daemon, no server, no
+database, no procurement, no root. With it they can:
+
+| | |
+|---|---|
+| `cairn context --job 918714` | every event from every producer bearing on one job — deterministically ordered, token-budgeted, redactable. Paste into a model, or just read it. |
+| `cairn init` | probe the stack into a reviewable, git-committable `site.yaml` that becomes the context header |
+| `cairn diff node-0046` | how a node differs from its 47 siblings, named down to the key |
+| `cairn capture --job 918714` | turn a real incident into a corpus entry, for hand redaction |
+| `cairn doctor` | what cairn can and cannot see here, and what each gap costs |
+| `cairn policy` | what cairn is permitted to do. Default-deny, fully audited |
+
+Behind that gate, eventually, exactly three reversible actuations — drain node,
+requeue job, rerun health check — and burn accounting for the tenants who pay
+(§8). Never config edits.
+
+**The artifact that matters most is not the binary.** It is the failure corpus
+and the taxonomy derived from it: signature → cause → remediation, accumulated
+across heterogeneous sites and providers. The CLI is copyable in a weekend and
+should be given away. The corpus compounds and cannot be cloned (§9).
+
+**Done looks like:** a user pastes one command's output into a model and gets a
+correct answer about *their* cluster; an admin replays someone else's redacted
+bundle offline; a tenant proves to their provider that the fabric — not their
+code — cost them forty hours of H100 time. All three with inference switched off
+if the site requires it.
+
+**Done does not look like:** a dashboard, a log store, an alerting system, or a
+scheduler. Two of those are "later" and two are "never" (§2).
+
 ---
 
 ## 2. Invariants
@@ -96,7 +128,7 @@ collectors/   capability-gated readers, one per producer
   ├─ slurm/         sacct, sacctmgr, scontrol, slurm.conf
   ├─ journal/       journald, slurmd/slurmctld logs
   ├─ gpu/           nvidia-smi, DCGM
-  ├─ fabric/        ibstat, perfquery, NCCL debug output
+  ├─ fabric/        ibstat. State, not events — see the package doc
   ├─ storage/       mounts, lctl, mmhealth
   └─ bmc/           Redfish, IPMI SEL
 schema/       the event struct + class enum. Versioned. Change with care.
@@ -126,6 +158,62 @@ what each collector can and cannot see, and why.
 ---
 
 ## 5. Current phase
+
+### Where this actually stands
+
+The code is roughly four phases deep. The evidence is at zero.
+
+| | |
+|---|---|
+| Commands that run | `init` `context` `doctor` `capture` `profile` `diff` `policy` `miss` `version` |
+| Collectors registered | slurm, journal, gpu (emit events); fabric (state only, §5 below) |
+| Producers with no collector | storage, bmc |
+| Observed incidents in the corpus | **0** (7 authored, all `synthetic: true`) |
+| Weeks of dogfooding | **0** |
+| Entries in the miss log | **0** |
+
+One number is worth sitting with: **four of the seven authored fixtures have
+been corrected by the code that was supposed to satisfy them** — 001, 002, 003
+and 005, each of which expected something its own captured input could not
+produce. That is §0.3's process working exactly as intended. It is also a
+measure of what authored fixtures are worth on their own, and the strongest
+argument available for doing the capture work before anything is built on top.
+
+### Next steps, in order
+
+**1. Land the branches on `main`.** Phases 3 and 4 and the corpus boundary sit
+on feature branches. A mistaken push replaced `origin/main` with an unrelated
+project, so restoring it needs a force-push, which is a human decision:
+`git push --force-with-lease origin main`. Also re-point the remote at
+`toucheLos/cairn` — the lowercase path now resolves elsewhere.
+
+**2. Capture ~20 real incidents.** This is Phase 0.3, it is the moat (§9), and
+it cannot be delegated: it needs cluster access, and inventing incidents would
+corrupt the eval set at its root. `cairn capture` now makes intake one command;
+hand redaction is still the process and the scanner still a backstop (§3). They
+go in the private corpus and are never committed.
+
+**3. Four weeks of dogfooding, logging every miss.** Phase 2's outstanding item,
+and §6 is explicit that the miss log — not our intuition — decides what gets
+built next. Half a day on one laptop already found two real bugs; Phase 3 and
+Phase 4 were both built from the specification instead, which is a debt this
+repays.
+
+**4. Then taxonomy v1**, from the corpus rather than from our guesses. Rules and
+signatures, not ML (§10). This is the compounding asset and the only step here
+that turns the corpus into something a competitor cannot clone.
+
+Buildable meanwhile, needing neither corpus nor cluster: the **read-only MCP
+surface** — though §9 rates it distribution rather than moat, and it must stay a
+consumer of the substrate, never part of it.
+
+Blocked, and correctly so: **storage and bmc collectors** (no fixtures; §10 says
+fixtures first), **perfquery** (its `link_downed` counter is cumulative since
+the last reset, so it needs a baseline design that deserves real captures), and
+**the three actuations** (§6 puts them after the gate, which is now proven but
+should not be opened until there is a reason to).
+
+### Phase status
 
 **Phase 4 is current**, entered from its far end: the policy engine is built
 against a null action set, because that is the one piece of Phase 4 that needs
@@ -176,12 +264,35 @@ guesses.
 - [x] Redaction layer, built now rather than retrofitted
 - [x] The join — clock skew, node-without-jobid, jobid-without-node, array and
       heterogeneous jobs
-- [ ] fabric, storage, and bmc collectors (not in the §6 scope for Phase 1;
-      fixture 005 still carries one uncovered `fabric` event)
+- [x] fabric collector — reads ibstat, reports what it can see, and emits **no
+      events**. Not a gap: ibstat carries no timestamp, ever, and cairn's rule
+      (set by the gpu collector) is that a producer with no time of its own
+      emits nothing rather than inventing one from the wall clock and breaking
+      §2.7. The fabric evidence that *is* timestamped — mlx5 kernel messages —
+      already reaches cairn through journald.
 
-Building the collectors corrected three fixtures whose expected streams had been
-authored from the incident rather than from the captured input. See
+      The snapshot becomes state instead: port state is a node-profile drift
+      key, so a port Down while its siblings are Active is reported by
+      `cairn diff`, which needs no timestamp because a node profile carries its
+      own. That is §7's fleet-relative signal, built on Phase 3's machinery
+      rather than on a fabricated event.
+
+      Registering it also lets `doctor` distinguish a fabric it cannot *read*
+      from one cairn does not *implement*. Those looked identical before and
+      call for opposite responses.
+- [ ] storage and bmc collectors. Neither has a fixture, and §10 says fixtures
+      first — building a parser and its fixture from one guess tests nothing.
+
+Building the collectors corrected **four** fixtures whose expected streams had
+been authored from the incident rather than from the captured input. The fourth
+is `005`, found while building the fabric collector: it expected an ibstat event
+carrying a flap count and a timestamp, and ibstat can supply neither. See
 `fixtures/README.md`, "Writing the expected stream".
+
+That is the process working rather than a defect in it. §0.3 puts the corpus
+before the code precisely so the corpus can argue with the code, and four times
+out of seven fixtures it has been the corpus that was wrong — which is a useful
+thing to know about how much authored fixtures are worth.
 
 **Phase 2 — first shippable artifact.** The commands run.
 

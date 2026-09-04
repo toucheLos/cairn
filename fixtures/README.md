@@ -212,6 +212,10 @@ them to be wrong in ways that a reader would never have caught:
   "CUDA Version" it prints is the highest runtime the driver supports, not the
   one the job used. Only the job's stderr knows.
 - `002` claimed a partition on the batch step row, where sacct leaves it blank.
+- `005` expected a `fabric` event from `ibstat` carrying `flap_count: 5` and a
+  timestamp. ibstat prints no time at all — not on that capture, not ever — and
+  the flap count is a tally of the *journal's* transitions, which the journal
+  collector already emits. Building the fabric collector is what surfaced it.
 
 An expected stream must contain only what a correct collector could actually
 derive from the files in `input/`. If the incident is explained by something the
@@ -219,6 +223,13 @@ captures do not contain, that belongs in `expected_root_cause` and `notes` — n
 as an event nobody can produce.
 
 The reverse is also worth stating: an expected stream may contain events from
-producers no collector reads yet. `005` still expects its `fabric` event from
-`ibstat`. The replay test compares per-source and reports uncovered producers, so
-the target stays whole while coverage grows toward it.
+producers no collector reads yet. The replay test compares per-source and
+reports uncovered producers, so the target stays whole while coverage grows
+toward it.
+
+And a third case, which `005` now demonstrates: a producer may be readable and
+still have nothing it can honestly put on a timeline. `005` keeps `fabric` in
+its `producers` list because `ibstat.txt` is still read — the collector reports
+whether the port is visible and what state it is in — while contributing no
+events. That state is compared against the node's siblings by `cairn diff`,
+which needs no timestamp because a node profile carries its own.

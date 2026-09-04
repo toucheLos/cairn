@@ -41,6 +41,7 @@ func CaptureNode(ctx context.Context, env collectors.Env, cluster schema.Cluster
 	gpu := probeGPU(ctx, env, &scratch)
 	mounts := probeMounts(env, &scratch)
 	mods := probeModules(env, &scratch)
+	_, ports := probeFabric(ctx, env, &scratch)
 	np.Probes = scratch.Probes
 
 	set := func(k, v string) {
@@ -90,6 +91,13 @@ func CaptureNode(ctx context.Context, env collectors.Env, cluster schema.Cluster
 
 	for _, m := range mounts {
 		set(KeyMountPrefix+m.Mountpoint, m.FSType+" "+m.Source)
+	}
+
+	// Port state, per port. Recorded individually rather than as one digest so
+	// that diff names the port that diverged: "mlx5_1 is Down while four
+	// siblings have it Active" is actionable, "the fabric differs" is not.
+	for _, port := range ports {
+		set(KeyFabricPortPrefix+port.ID(), port.Summary())
 	}
 
 	sort.SliceStable(np.Probes, func(i, j int) bool { return np.Probes[i].Name < np.Probes[j].Name })

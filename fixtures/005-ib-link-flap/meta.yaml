@@ -50,3 +50,19 @@ notes: >-
   with zeroed placeholders that keep the fabric topology intact — the same
   placeholder appears everywhere the original did — while carrying no information
   about the hardware.
+
+  THIS FIXTURE ONCE EXPECTED A `fabric` EVENT. It was removed, and it should not
+  be re-added. The event claimed `flap_count: 5` and a timestamp of 10:03:29,
+  and input/ibstat.txt can supply neither: the flap count is a tally of the
+  *journal's* transitions, which the journal collector already emits, and ibstat
+  prints no time at all — not on this capture, not ever. It was authored from
+  the incident rather than from the input, which is the mistake README's
+  "Writing the expected stream" describes and the fourth fixture to have made
+  it, after 001, 002 and 003.
+
+  `producers` still lists fabric, and ibstat.txt is still read: the fabric
+  collector reports whether the port is visible and what state it is in. It just
+  has nothing it can honestly place on a timeline. The port really was
+  Down/Polling and that is still the diagnosis — see expected_root_cause — and
+  the state is compared against the node's siblings by `cairn diff`, which needs
+  no timestamp because a node profile carries its own.

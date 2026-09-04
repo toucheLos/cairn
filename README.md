@@ -197,7 +197,7 @@ discoverable by noticing the damage.
 schema/       the event struct and the closed class enum   <- the important part
 fixtures/     redacted, pre-classified incidents           <- tests AND eval set
 redact/       deterministic pseudonymization + the pre-commit scanner
-collectors/   capability-gated readers: slurm, journal, gpu
+collectors/   capability-gated readers: slurm, journal, gpu, fabric
 join/         correlation on (node, jobid, time)
 site/         discovery, site.yaml, fleet-relative drift
 yamlsub/      the bounded YAML subset the config files use
@@ -206,8 +206,16 @@ policy/       default-deny allowlist, dry-run, audit log   <- no actions exist
 taxonomy/     signature -> cause -> remediation            (Phase 4)
 ```
 
-`fabric`, `storage` and `bmc` have no collector yet. `cairn doctor` says so
-rather than leaving their absence to be read as a clean bill of health.
+`storage` and `bmc` have no collector yet, and `cairn doctor` says so rather
+than leaving their absence to be read as a clean bill of health.
+
+`fabric` is a third case worth knowing about: it reads `ibstat` and emits no
+events at all. `ibstat` prints no timestamp, and cairn will not invent one from
+the wall clock — so the port snapshot becomes node-profile state that
+`cairn diff` compares against a node's siblings, and the timestamped fabric
+evidence reaches cairn through journald instead. `doctor` reports whether the
+fabric is *readable*, which is a different question from whether it is
+implemented.
 
 `schema/` is the most important artifact here. The `class` enum is closed: adding a
 member is a schema version bump, not a casual commit. See `schema/DESIGN.md`.
