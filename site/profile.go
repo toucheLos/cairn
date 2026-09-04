@@ -182,6 +182,14 @@ const (
 	KeyMungeKeyMtime = "munge.key_mtime"
 	// KeyMountPrefix is followed by a mountpoint: "mount./scratch".
 	KeyMountPrefix = "mount."
+	// KeyFabricPortPrefix is followed by a port id: "fabric.port.mlx5_0:1".
+	//
+	// This is where the InfiniBand snapshot earns its keep. ibstat carries no
+	// timestamp, so collectors/fabric emits no events from it — but a port that
+	// is Down while its siblings are Active is exactly CLAUDE.md §7's signal,
+	// and a drift key needs no timestamp of its own because the node profile
+	// already carries CapturedAt.
+	KeyFabricPortPrefix = "fabric.port."
 )
 
 // NodeProfile is one node's drift keys, captured on that node.

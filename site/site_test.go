@@ -554,3 +554,70 @@ func TestGoldensDecode(t *testing.T) {
 		})
 	}
 }
+
+// TestFabricPortDriftIsReported is the test that says the fabric design works.
+//
+// ibstat carries no timestamp, so collectors/fabric emits no events and the port
+// snapshot becomes a drift key instead. That trade is only worth making if the
+// signal actually comes out the other end: a node whose InfiniBand port is Down
+// while its siblings are Active must be reported, and must be named down to the
+// port.
+func TestFabricPortDriftIsReported(t *testing.T) {
+	ps := loadProfiles(t, "profiles")
+	target, ok := find(ps, "node-0046")
+	if !ok {
+		t.Fatal("fixture node-0046 missing")
+	}
+	res := Compare(target, ps)
+	if res.Refused != "" {
+		t.Fatalf("unexpected refusal: %s", res.Refused)
+	}
+
+	key := KeyFabricPortPrefix + "mlx5_0:1"
+	var found bool
+	for _, d := range res.Drifts {
+		if d.Key != key {
+			continue
+		}
+		found = true
+		if !strings.Contains(d.Observed, "Down") {
+			t.Errorf("observed = %q, want the down state", d.Observed)
+		}
+		if !strings.Contains(d.Expected, "Active") {
+			t.Errorf("expected = %q, want the sibling majority's Active", d.Expected)
+		}
+		// Named down to the port, not "the fabric differs": an operator has to
+		// know which HCA to look at.
+		if !strings.Contains(d.Key, "mlx5_0") {
+			t.Errorf("the drift key does not name the device: %q", d.Key)
+		}
+	}
+	if !found {
+		t.Errorf("a node with a Down IB port was not reported as drifted; drifts were %v",
+			driftKeys(res.Drifts))
+	}
+
+	// And it must reach the event stream, so a drift report can be attached to a
+	// ticket like any other evidence.
+	evs, err := res.Events()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inEvents bool
+	for _, e := range evs {
+		if e.Detail.Attrs["key"] == key {
+			inEvents = true
+		}
+	}
+	if !inEvents {
+		t.Error("the fabric drift did not reach the event stream")
+	}
+}
+
+func driftKeys(ds []Drift) []string {
+	out := make([]string, len(ds))
+	for i, d := range ds {
+		out[i] = d.Key
+	}
+	return out
+}

@@ -10,7 +10,9 @@ CA 'mlx5_0'
 CA 'mlx5_1'
 	CA type: MT4123
 	Number of ports: 1
+	Firmware version: 20.38.1002
 	Port 1:
 		State: Active
+		Physical state: LinkUp
 		Rate: 200
 		Link layer: InfiniBand

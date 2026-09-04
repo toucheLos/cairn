@@ -96,7 +96,7 @@ collectors/   capability-gated readers, one per producer
   ├─ slurm/         sacct, sacctmgr, scontrol, slurm.conf
   ├─ journal/       journald, slurmd/slurmctld logs
   ├─ gpu/           nvidia-smi, DCGM
-  ├─ fabric/        ibstat, perfquery, NCCL debug output
+  ├─ fabric/        ibstat. State, not events — see the package doc
   ├─ storage/       mounts, lctl, mmhealth
   └─ bmc/           Redfish, IPMI SEL
 schema/       the event struct + class enum. Versioned. Change with care.
@@ -176,12 +176,35 @@ guesses.
 - [x] Redaction layer, built now rather than retrofitted
 - [x] The join — clock skew, node-without-jobid, jobid-without-node, array and
       heterogeneous jobs
-- [ ] fabric, storage, and bmc collectors (not in the §6 scope for Phase 1;
-      fixture 005 still carries one uncovered `fabric` event)
+- [x] fabric collector — reads ibstat, reports what it can see, and emits **no
+      events**. Not a gap: ibstat carries no timestamp, ever, and cairn's rule
+      (set by the gpu collector) is that a producer with no time of its own
+      emits nothing rather than inventing one from the wall clock and breaking
+      §2.7. The fabric evidence that *is* timestamped — mlx5 kernel messages —
+      already reaches cairn through journald.
 
-Building the collectors corrected three fixtures whose expected streams had been
-authored from the incident rather than from the captured input. See
+      The snapshot becomes state instead: port state is a node-profile drift
+      key, so a port Down while its siblings are Active is reported by
+      `cairn diff`, which needs no timestamp because a node profile carries its
+      own. That is §7's fleet-relative signal, built on Phase 3's machinery
+      rather than on a fabricated event.
+
+      Registering it also lets `doctor` distinguish a fabric it cannot *read*
+      from one cairn does not *implement*. Those looked identical before and
+      call for opposite responses.
+- [ ] storage and bmc collectors. Neither has a fixture, and §10 says fixtures
+      first — building a parser and its fixture from one guess tests nothing.
+
+Building the collectors corrected **four** fixtures whose expected streams had
+been authored from the incident rather than from the captured input. The fourth
+is `005`, found while building the fabric collector: it expected an ibstat event
+carrying a flap count and a timestamp, and ibstat can supply neither. See
 `fixtures/README.md`, "Writing the expected stream".
+
+That is the process working rather than a defect in it. §0.3 puts the corpus
+before the code precisely so the corpus can argue with the code, and four times
+out of seven fixtures it has been the corpus that was wrong — which is a useful
+thing to know about how much authored fixtures are worth.
 
 **Phase 2 — first shippable artifact.** The commands run.
 

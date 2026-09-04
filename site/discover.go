@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/touchelos/cairn/collectors"
+	"github.com/touchelos/cairn/collectors/fabric"
 	"github.com/touchelos/cairn/schema"
 )
 
@@ -42,7 +43,7 @@ func Discover(ctx context.Context, env collectors.Env, fallbackCluster schema.Cl
 	p.Modules = probeModules(env, &p)
 	p.Builders = probeBuilders(env, &p)
 	p.OS = probeOS(ctx, env, &p)
-	p.Fabric = probeFabric(ctx, env, &p)
+	p.Fabric, _ = probeFabric(ctx, env, &p)
 	p.GPU = probeGPU(ctx, env, &p)
 	p.Mounts = probeMounts(env, &p)
 	p.BMC = probeBMC(env, &p)
@@ -280,7 +281,13 @@ func osReleaseValue(data []byte, key string) string {
 
 // ---------- fabric ----------
 
-func probeFabric(ctx context.Context, env collectors.Env, p *Profile) Fabric {
+// probeFabric returns the cluster-level fabric summary and the per-port state.
+//
+// The ports are returned separately rather than stored on Fabric because they
+// are a fact about one machine, not about the cluster. site.yaml describes the
+// site; a port being Down belongs in the node profile, where `cairn diff`
+// compares it against the same port on the node's siblings.
+func probeFabric(ctx context.Context, env collectors.Env, p *Profile) (Fabric, []fabric.Port) {
 	pr := Probe{
 		Name:  "fabric",
 		Level: LevelUnprivileged,
@@ -291,25 +298,25 @@ func probeFabric(ctx context.Context, env collectors.Env, p *Profile) Fabric {
 	if _, err := env.LookPath("ibstat"); err != nil {
 		pr.Detail = "ibstat not present; this host has no InfiniBand tooling, or the fabric is Ethernet"
 		add(p, pr)
-		return Fabric{Kind: "none"}
+		return Fabric{Kind: "none"}, nil
 	}
 	out, err := env.Run(ctx, "ibstat")
 	if err != nil {
 		pr.Detail = "ibstat present but did not run: " + err.Error()
 		add(p, pr)
-		return Fabric{Kind: "none"}
+		return Fabric{Kind: "none"}, nil
 	}
 
+	// One ibstat parser in the repo, shared with the collector. site/ had its
+	// own until collectors/fabric existed; two parsers of one tool is how the
+	// nvidia-smi header patterns ended up duplicated, and that is not a
+	// precedent worth extending.
+	ports, warns := fabric.ParseIbstat(out)
 	f := Fabric{Kind: "infiniband"}
-	for _, line := range strings.Split(string(out), "\n") {
-		t := strings.TrimSpace(line)
-		switch {
-		case strings.HasPrefix(t, "CA '"):
-			f.HCAs = append(f.HCAs, strings.Trim(strings.TrimPrefix(t, "CA "), "'"))
-		case strings.HasPrefix(t, "Rate:"):
-			f.Rates = append(f.Rates, strings.TrimSpace(strings.TrimPrefix(t, "Rate:")))
-		case strings.HasPrefix(t, "Link layer:") &&
-			strings.EqualFold(strings.TrimSpace(strings.TrimPrefix(t, "Link layer:")), "Ethernet"):
+	for _, port := range ports {
+		f.HCAs = append(f.HCAs, port.Device)
+		f.Rates = append(f.Rates, port.Rate)
+		if strings.EqualFold(port.LinkLayer, "Ethernet") {
 			// A Mellanox card in Ethernet mode is RoCE, not InfiniBand, and the
 			// difference decides whether perfquery means anything here.
 			f.Kind = "roce"
@@ -317,6 +324,9 @@ func probeFabric(ctx context.Context, env collectors.Env, p *Profile) Fabric {
 	}
 	f.HCAs = uniqueSorted(f.HCAs)
 	f.Rates = uniqueSorted(f.Rates)
+	if len(warns) > 0 {
+		pr.Detail = strings.Join(warns, "; ")
+	}
 
 	pr.Available = true
 	pr.Detail = f.Kind
@@ -324,7 +334,7 @@ func probeFabric(ctx context.Context, env collectors.Env, p *Profile) Fabric {
 		pr.Detail += ", " + strings.Join(f.HCAs, " ")
 	}
 	add(p, pr)
-	return f
+	return f, ports
 }
 
 // ---------- gpu ----------

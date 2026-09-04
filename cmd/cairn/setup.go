@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/touchelos/cairn/collectors"
+	"github.com/touchelos/cairn/collectors/fabric"
 	"github.com/touchelos/cairn/collectors/gpu"
 	"github.com/touchelos/cairn/collectors/journal"
 	"github.com/touchelos/cairn/collectors/slurm"
@@ -17,11 +18,16 @@ import (
 
 // registry is the set of collectors this build knows how to run.
 //
-// Phase 1 scope (CLAUDE.md §6): slurm, journal, gpu. fabric, storage, and bmc
-// have no collector yet, and `doctor` says so rather than leaving their absence
-// to be inferred from silence.
+// slurm, journal and gpu emit events. fabric reports what it can see and emits
+// none — ibstat carries no timestamp, so its snapshot becomes node-profile drift
+// rather than a timeline entry (see collectors/fabric). It is registered anyway
+// because `doctor` must be able to distinguish a fabric it cannot read from one
+// cairn does not implement; before this they looked identical.
+//
+// storage and bmc still have no collector, and `doctor` says so rather than
+// leaving their absence to be inferred from silence.
 func registry() collectors.Registry {
-	return collectors.Registry{slurm.New(), journal.New(), gpu.New()}
+	return collectors.Registry{slurm.New(), journal.New(), gpu.New(), fabric.New()}
 }
 
 // commonFlags are shared by every command that collects.

@@ -5,6 +5,5 @@
   {"ts":"2026-03-04T10:02:44.000000000Z","cluster":"cluster-a","node":"node-0045","jobid":null,"source":"journal","class":"fabric.link_flap","detail":{"signature":"mlx5.ib_event.link_down","attrs":{"device":"mlx5_0","link_state":"Down","port":"1"}}},
   {"ts":"2026-03-04T10:03:02.000000000Z","cluster":"cluster-a","node":"node-0045","jobid":null,"source":"journal","class":"fabric.link_flap","detail":{"signature":"mlx5.ib_event.link_up","attrs":{"device":"mlx5_0","link_state":"Active","port":"1"}}},
   {"ts":"2026-03-04T10:03:27.000000000Z","cluster":"cluster-a","node":"node-0045","jobid":null,"source":"journal","class":"fabric.link_flap","detail":{"signature":"mlx5.ib_event.link_down","attrs":{"device":"mlx5_0","link_state":"Down","port":"1"}}},
-  {"ts":"2026-03-04T10:03:29.000000000Z","cluster":"cluster-a","node":"node-0045","jobid":null,"source":"fabric","class":"fabric.link_flap","detail":{"signature":"ib.ibstat.port_down","attrs":{"device":"mlx5_0","flap_count":"5","link_state":"Down","phys_state":"Polling","port":"1","rate":"10"}}},
   {"ts":"2026-03-04T10:03:31.000000000Z","cluster":"cluster-a","node":"node-0045","jobid":{"raw":"918633","base":918633},"source":"slurm","class":"app.nonzero_exit","detail":{"signature":"slurm.sacct.state.FAILED","attrs":{"account":"acct-02","exit_code":"1:0","partition":"normal","state":"FAILED","user":"user-02"}}}
 ]
